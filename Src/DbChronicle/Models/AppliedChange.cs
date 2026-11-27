@@ -7,6 +7,8 @@ namespace DbChronicle.Migrations.State
         public string Release { get; set; } = "";
         public string Checksum { get; set; } = "";
         public string Dialect { get; set; } = "";
+        public string DialectVersion { get; set; } = "";
+        public string CapabilityLevel { get; set; } = "";
         public string AppliedBy { get; set; } = "";
         public string Description { get; set; } = "";
         public string AppliedAt { get; set; } = "";

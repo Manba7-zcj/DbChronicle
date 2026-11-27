@@ -36,6 +36,13 @@ namespace DbChronicle.Cli
                 throw new CliFailureException(ExitCodes.Usage, "未找到变更单元：" + loader.MigrationsDirectory);
             }
 
+            var chainDiagnostics = ChainValidator.Validate(allUnits, config);
+            PrintDiagnostics(chainDiagnostics);
+            if (chainDiagnostics.Any(x => x.Severity == DiagnosticSeverity.Error))
+            {
+                throw new CliFailureException(ExitCodes.Usage, "变更链校验未通过，已中止编译（详见上方诊断）");
+            }
+
             var emit = args.Get("emit", null);
             var pipeName = args.Get("pipe", null);
             var pipeMode = !string.IsNullOrEmpty(emit) || !string.IsNullOrEmpty(pipeName);
@@ -416,7 +423,7 @@ namespace DbChronicle.Cli
                 }
             }
 
-            diagnostics.AddRange(new ChangeChecker().Check(units));
+            diagnostics.AddRange(ChainValidator.Validate(units, config));
 
             PrintDiagnostics(diagnostics);
 

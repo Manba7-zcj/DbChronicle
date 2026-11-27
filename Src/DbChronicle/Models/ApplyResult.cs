@@ -15,12 +15,13 @@ namespace DbChronicle.Models
 
         public string Message { get; set; }
 
+        /// <summary>成功时为空；任何失败都通过异常（DbChronicleException 及其子类）传递。</summary>
         public int? ExitCode { get; set; }
 
-        /// <summary>continueOnError 模式下的失败明细（单元 / 表 / 原因）。</summary>
+        /// <summary>continueOnError 模式下的失败明细；该模式结束时抛 MigrationFailedException 并携带同一份明细。</summary>
         public List<string> Failures { get; } = new List<string>();
 
-        /// <summary>continueOnError 模式下失败的单元数。</summary>
+        /// <summary>continueOnError 模式下失败的单元数（失败时通过 MigrationFailedException 传递）。</summary>
         public int FailedCount { get; set; }
 
         public List<CompileDiagnostic> Diagnostics { get; } = new List<CompileDiagnostic>();

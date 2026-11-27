@@ -11,6 +11,13 @@ namespace DbChronicle.Compilation.Checks
 {
     public sealed class ChangeChecker
     {
+        private readonly bool _strictReferenceCheck;
+
+        public ChangeChecker(bool strictReferenceCheck = true)
+        {
+            _strictReferenceCheck = strictReferenceCheck;
+        }
+
         public IReadOnlyList<CompileDiagnostic> Check(IReadOnlyList<ChangeUnit> units)
         {
             var diagnostics = new List<CompileDiagnostic>();
@@ -38,11 +45,14 @@ namespace DbChronicle.Compilation.Checks
                 var local = CollectLocalCreations(unit);
                 CheckUnitReferences(unit, model, aux, local, diagnostics);
                 CheckStageBeforeBoundary(unit, local, diagnostics);
+                CheckDataOperations(unit, model, local, diagnostics);
+                ConsequenceChecker.Check(unit, model, diagnostics);
 
                 foreach (var operation in unit.Operations)
                 {
                     var column = operation as ColumnOperation;
                     if (column != null && column.Action == ColumnAction.Drop
+                        && !IsWildcardTable(operation.Table)
                         && !model.TryGetColumn(operation.Table, column.Name, out _)
                         && !local.Columns.Contains(ColumnKey(operation.Table, column.Name)))
                     {
@@ -120,7 +130,10 @@ namespace DbChronicle.Compilation.Checks
                     }
                 }
 
+                var tablesBefore = new HashSet<string>(model.Tables.Keys, StringComparer.OrdinalIgnoreCase);
+                var columnsBefore = SnapshotColumns(model);
                 builder.Apply(model, unit);
+                PruneImplicitState(model, tablesBefore, columnsBefore, local);
                 ApplyAuxState(unit, aux);
             }
 
@@ -135,10 +148,22 @@ namespace DbChronicle.Compilation.Checks
                 if (operation is CreateTableOperation)
                 {
                     local.Tables.Add(operation.Table ?? "");
+                    var create = (CreateTableOperation)operation;
+                    foreach (var definition in create.Columns)
+                    {
+                        local.Columns.Add(ColumnKey(operation.Table, definition.Name));
+                        local.CreatedColumns.Add(ColumnKey(operation.Table, definition.Name));
+                    }
+
+                    foreach (var primaryKeyColumn in create.PrimaryKeyColumns)
+                    {
+                        local.Columns.Add(ColumnKey(operation.Table, primaryKeyColumn));
+                        local.CreatedColumns.Add(ColumnKey(operation.Table, primaryKeyColumn));
+                    }
                 }
 
                 var column = operation as ColumnOperation;
-                if (column != null && column.Action == ColumnAction.Add)
+                if (column != null && (column.Action == ColumnAction.Add || column.Action == ColumnAction.Rename))
                 {
                     local.Columns.Add(ColumnKey(operation.Table, column.Name));
                 }
@@ -146,7 +171,7 @@ namespace DbChronicle.Compilation.Checks
             return local;
         }
 
-        private static void CheckUnitReferences(
+        private void CheckUnitReferences(
             ChangeUnit unit,
             StructureModel model,
             ChainAuxState aux,
@@ -155,6 +180,11 @@ namespace DbChronicle.Compilation.Checks
         {
             foreach (var operation in unit.Operations)
             {
+                if (IsWildcardTable(operation.Table))
+                {
+                    continue;
+                }
+
                 if (operation is CreateTableOperation)
                 {
                     if (model.Tables.ContainsKey(operation.Table))
@@ -236,8 +266,12 @@ namespace DbChronicle.Compilation.Checks
 
                 if (!model.Tables.ContainsKey(table) && !local.Tables.Contains(table))
                 {
-                    diagnostics.Add(Error(DiagnosticCodes.ChainTableMissing, unit.Id, table, null,
-                        "操作目标表在变更链中不存在：" + table));
+                    if (_strictReferenceCheck)
+                    {
+                        diagnostics.Add(Error(DiagnosticCodes.ChainTableMissing, unit.Id, table, null,
+                            "操作目标表在变更链中不存在：" + table));
+                    }
+
                     continue;
                 }
 
@@ -329,6 +363,116 @@ namespace DbChronicle.Compilation.Checks
             }
         }
 
+        private static void CheckDataOperations(ChangeUnit unit, StructureModel model, LocalCreations local,
+            List<CompileDiagnostic> diagnostics)
+        {
+            foreach (var operation in unit.Operations)
+            {
+                if (IsWildcardTable(operation.Table))
+                {
+                    continue;
+                }
+
+                var update = operation as UpdateOperation;
+                if (update != null)
+                {
+                    CheckAssignmentColumns(unit, operation.Table, update.Set, model, local, diagnostics);
+                    continue;
+                }
+
+                var clean = operation as CleanOperation;
+                if (clean != null)
+                {
+                    CheckAssignmentColumns(unit, operation.Table, clean.Rules, model, local, diagnostics);
+                    continue;
+                }
+
+                var seed = operation as SeedOperation;
+                if (seed != null)
+                {
+                    foreach (var row in seed.Rows)
+                    {
+                        if (row.Count != seed.Columns.Count)
+                        {
+                            diagnostics.Add(Error(DiagnosticCodes.ChainSeedColumnsInvalid, unit.Id, operation.Table, null,
+                                "种子数据的行值个数（" + row.Count + "）与列个数（" + seed.Columns.Count + "）不一致"));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void CheckAssignmentColumns(ChangeUnit unit, string table, string assignments,
+            StructureModel model, LocalCreations local, List<CompileDiagnostic> diagnostics)
+        {
+            if (string.IsNullOrEmpty(assignments))
+            {
+                return;
+            }
+
+            foreach (var item in assignments.Split(';', ','))
+            {
+                var index = item.IndexOf('=');
+                if (index <= 0)
+                {
+                    continue;
+                }
+
+                var name = item.Substring(0, index).Trim().Trim('"', '`', '[', ']');
+                if (name.Length == 0 || name.IndexOf('(') >= 0)
+                {
+                    continue;
+                }
+
+                if (!ColumnExists(model, table, name, local))
+                {
+                    diagnostics.Add(Error(DiagnosticCodes.ChainColumnMissing, unit.Id, table, name,
+                        "数据改写的目标列不存在：" + name));
+                }
+            }
+        }
+
+        private static Dictionary<string, HashSet<string>> SnapshotColumns(StructureModel model)
+        {
+            var snapshot = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var table in model.Tables)
+            {
+                snapshot[table.Key] = new HashSet<string>(table.Value.Columns.Keys, StringComparer.OrdinalIgnoreCase);
+            }
+
+            return snapshot;
+        }
+
+        private static void PruneImplicitState(StructureModel model, HashSet<string> tablesBefore,
+            Dictionary<string, HashSet<string>> columnsBefore, LocalCreations local)
+        {
+            foreach (var table in new List<string>(model.Tables.Keys))
+            {
+                if (!tablesBefore.Contains(table) && !local.Tables.Contains(table))
+                {
+                    model.Tables.Remove(table);
+                    continue;
+                }
+
+                HashSet<string> before;
+                columnsBefore.TryGetValue(table, out before);
+                foreach (var column in new List<string>(model.Tables[table].Columns.Keys))
+                {
+                    var existed = before != null && before.Contains(column);
+                    if (!existed && !local.Columns.Contains(ColumnKey(table, column)))
+                    {
+                        model.Tables[table].RemoveColumn(column);
+                    }
+                }
+            }
+        }
+
+        private static bool IsWildcardTable(string table)
+        {
+            return string.Equals((table ?? "").Trim(), "*", StringComparison.Ordinal);
+        }
+
         private static void CheckColumnReference(
             ChangeUnit unit,
             ColumnOperation column,
@@ -345,7 +489,8 @@ namespace DbChronicle.Compilation.Checks
             if (column.Action == ColumnAction.Add)
             {
                 TableModel tableModel;
-                if (model.Tables.TryGetValue(table, out tableModel) && tableModel.Columns.ContainsKey(column.Name))
+                if (model.Tables.TryGetValue(table, out tableModel) && tableModel.Columns.ContainsKey(column.Name)
+                    || local.CreatedColumns.Contains(ColumnKey(table, column.Name)))
                 {
                     diagnostics.Add(Error(DiagnosticCodes.ChainColumnAlreadyExists, unit.Id, table, column.Name,
                         "ADD 的列已存在（可能由建表或基线定义）：" + column.Name));
@@ -547,7 +692,7 @@ namespace DbChronicle.Compilation.Checks
         {
             foreach (var operation in unit.Operations)
             {
-                if (operation.Stage != OperationStage.Before)
+                if (operation.Stage != OperationStage.Before || IsWildcardTable(operation.Table))
                 {
                     continue;
                 }
@@ -862,6 +1007,7 @@ namespace DbChronicle.Compilation.Checks
         {
             public readonly HashSet<string> Tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             public readonly HashSet<string> Columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public readonly HashSet<string> CreatedColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

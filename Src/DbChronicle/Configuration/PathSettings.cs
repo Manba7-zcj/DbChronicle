@@ -5,5 +5,6 @@ namespace DbChronicle.Configuration
         public string Migrations { get; set; } = "./migrations";
         public string VersionLog { get; set; } = "./version_log/${environment}";
         public string Output { get; set; } = "./output";
+        public string Releases { get; set; } = "./releases";
     }
 }

@@ -33,6 +33,7 @@ namespace DbChronicle.Migrations.State
         private static readonly ConcurrentDictionary<string, object> FileLocks =
             new ConcurrentDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly DbChronicleConfig _config;
         private readonly string _directory;
 
         public VersionStore(DbChronicleConfig config)
@@ -42,6 +43,7 @@ namespace DbChronicle.Migrations.State
                 throw new ArgumentNullException("config");
             }
 
+            _config = config;
             _directory = config.ResolveVersionLogPath();
         }
 
@@ -73,6 +75,8 @@ namespace DbChronicle.Migrations.State
                     Release = Attr(element, "release"),
                     Checksum = Attr(element, "checksum"),
                     Dialect = Attr(element, "dialect"),
+                    DialectVersion = Attr(element, "dialectVersion"),
+                    CapabilityLevel = Attr(element, "capabilityLevel"),
                     AppliedBy = Attr(element, "appliedBy"),
                     Description = Attr(element, "description"),
                     AppliedAt = Attr(element, "appliedAt"),
@@ -235,6 +239,8 @@ namespace DbChronicle.Migrations.State
                         new XAttribute("appliedAt", Now()),
                         new XAttribute("checksum", checksum ?? ""),
                         new XAttribute("dialect", dialect ?? ""),
+                        new XAttribute("dialectVersion", _config.Database.Version ?? ""),
+                        new XAttribute("capabilityLevel", _config.Database.CapabilityLevel ?? ""),
                         new XAttribute("appliedBy", appliedBy ?? ""),
                         new XAttribute("description", description ?? ""),
                         new XAttribute("failureAt", ""),
@@ -246,6 +252,8 @@ namespace DbChronicle.Migrations.State
                 existing.SetAttributeValue("appliedAt", Now());
                 existing.SetAttributeValue("checksum", checksum ?? "");
                 existing.SetAttributeValue("dialect", dialect ?? "");
+                existing.SetAttributeValue("dialectVersion", _config.Database.Version ?? "");
+                existing.SetAttributeValue("capabilityLevel", _config.Database.CapabilityLevel ?? "");
                 existing.SetAttributeValue("appliedBy", appliedBy ?? "");
                 existing.SetAttributeValue("description", description ?? "");
             });

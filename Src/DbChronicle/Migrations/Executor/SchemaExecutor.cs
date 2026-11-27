@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System;
 
+using DbChronicle.Common.Enums;
+using DbChronicle.Compilation.Checks;
 using DbChronicle.Compilation.Compiler;
 using DbChronicle.Compilation.Dialects;
 using DbChronicle.Configuration;
@@ -37,6 +39,10 @@ namespace DbChronicle.Migrations.Executor
         /// <summary>
         /// 使用宿主提供的执行器实例执行（不创建、不释放连接）。
         /// 核心库不包含任何数据库驱动实现，执行器由调用方注入。
+        /// 内核不吞异常：执行失败抛 <see cref="StatementExecutionException"/>（保留原始内部异常），
+        /// 链校验（引用/版本/顺序）失败抛 <see cref="ChainValidationException"/>（带 Diagnostics），
+        /// 状态文件 / 目录 / 锁等环境异常原样上抛；<see cref="ApplyResult"/> 只承载可判定的失败
+        /// （空目录、checksum、文件丢失、锁被占用、编译诊断）与 continueOnError 的聚合结果。
         /// </summary>
         public ApplyResult ApplyWith(IDbExecutor executor, IReadOnlyList<ChangeUnit> units, ApplyOptions options)
         {
@@ -49,10 +55,18 @@ namespace DbChronicle.Migrations.Executor
             var ordered = ChangeUnitLoader.Sort(units);
             if (ordered.Count == 0)
             {
-                result.Message = "未找到变更单元：" + _config.ResolveMigrationsPath();
-                result.ExitCode = 1;
-                return result;
+                throw new MigrationConfigurationException("未找到变更单元：" + _config.ResolveMigrationsPath());
             }
+
+            var chainDiagnostics = ChainValidator.Validate(ordered, _config);
+            var chainErrors = chainDiagnostics.Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
+            if (chainErrors.Count > 0)
+            {
+                throw new ChainValidationException(
+                    "变更链校验未通过（" + chainErrors.Count + " 个错误，已拒绝执行）", chainDiagnostics, 1);
+            }
+
+            result.Diagnostics.AddRange(chainDiagnostics);
 
             var dialectContext = new DialectContext { IncrementalModify = _config.Options.IncrementalModify };
             var dialect = DialectFactory.Create(_config.Database.Dialect, _config.Database.Version, dialectContext);
@@ -66,10 +80,8 @@ namespace DbChronicle.Migrations.Executor
             {
                 if (!IsDialectCompatible(executor.DialectName, _config.Database.Dialect))
                 {
-                    result.Message = "执行器方言（" + executor.DialectName + "）与配置方言（"
-                        + _config.Database.Dialect + "）不一致，拒绝执行";
-                    result.ExitCode = 5;
-                    return result;
+                    throw new MigrationEnvironmentException("执行器方言（" + executor.DialectName + "）与配置方言（"
+                        + _config.Database.Dialect + "）不一致，拒绝执行");
                 }
 
                 IDbLock dbLock = null;
@@ -81,42 +93,38 @@ namespace DbChronicle.Migrations.Executor
                         var timeout = TimeSpan.FromSeconds(Math.Max(0, options.LockTimeoutSeconds));
                         if (!dbLock.TryAcquire(timeout))
                         {
-                            result.Message = "另一进程正在执行 apply（无法获取库级锁）";
-                            result.ExitCode = 4;
-                            return result;
+                            throw new MigrationLockException("另一进程正在执行 apply（无法获取库级锁）");
                         }
                     }
 
                     var store = new VersionStore(_config);
-                    List<AppliedChange> applied;
-                    if (options.DryRun)
-                    {
-                        try
-                        {
-                            applied = store.LoadAll();
-                        }
-                        catch
-                        {
-                            applied = new List<AppliedChange>();
-                        }
-                    }
-                    else
+                    if (!options.DryRun)
                     {
                         store.EnsureTable();
-                        applied = store.LoadAll();
                     }
+
+                    var applied = store.LoadAll();
 
                     if (!string.IsNullOrEmpty(options.MarkAppliedChangeId) && options.DryRun)
                     {
-                        result.Message = "dry-run 与 mark-applied 不能同时使用：标记已应用会写状态文件";
-                        result.ExitCode = 1;
-                        return result;
+                        throw new MigrationConfigurationException("dry-run 与 mark-applied 不能同时使用：标记已应用会写状态文件");
                     }
 
                     if (!string.IsNullOrEmpty(options.MarkAppliedChangeId))
                     {
                         return MarkApplied(store, ordered, options);
                     }
+
+                    var runtimeDiagnostics = ChainValidator.ValidateRuntime(ordered, _config, applied);
+                    var runtimeErrors = runtimeDiagnostics.Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
+                    if (runtimeErrors.Count > 0)
+                    {
+                        throw new ChainValidationException(
+                            "运行期校验未通过（能力级别漂移 / 版本空洞 / 升级顺序倒挂，已拒绝执行）",
+                            runtimeDiagnostics, 1);
+                    }
+
+                    result.Diagnostics.AddRange(runtimeDiagnostics);
 
                     var knownIds = new HashSet<string>(ordered.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
                     var missingFiles = applied
@@ -125,10 +133,8 @@ namespace DbChronicle.Migrations.Executor
                         .ToList();
                     if (missingFiles.Count > 0)
                     {
-                        result.Message = "已应用的变更单元文件丢失：" + string.Join(", ", missingFiles)
-                            + "（请恢复文件，或按补丁规范新增变更单元）";
-                        result.ExitCode = 3;
-                        return result;
+                        throw new MigrationStateException("已应用的变更单元文件丢失：" + string.Join(", ", missingFiles)
+                            + "（请恢复文件，或按补丁规范新增变更单元）");
                     }
 
                     foreach (var unit in ordered)
@@ -139,10 +145,8 @@ namespace DbChronicle.Migrations.Executor
                         {
                             if (!string.Equals(record.Checksum, unit.Checksum, StringComparison.OrdinalIgnoreCase))
                             {
-                                result.Message = "已应用的变更单元文件被修改（checksum 不一致）：" + unit.Id
-                                    + "；已应用=" + record.Checksum + "，当前=" + unit.Checksum;
-                                result.ExitCode = 3;
-                                return result;
+                                throw new MigrationStateException("已应用的变更单元文件被修改（checksum 不一致）：" + unit.Id
+                                    + "；已应用=" + record.Checksum + "，当前=" + unit.Checksum);
                             }
 
                             skip = !record.HasFailure;
@@ -150,9 +154,7 @@ namespace DbChronicle.Migrations.Executor
 
                         if (!skip && !PrepareWildcardTables(executor, unit, compilerOptions, options, out var wildcardMessage))
                         {
-                            result.Message = wildcardMessage;
-                            result.ExitCode = 5;
-                            return result;
+                            throw new MigrationEnvironmentException(wildcardMessage);
                         }
 
                         var model = compilerOptions.IncrementalModify
@@ -171,9 +173,7 @@ namespace DbChronicle.Migrations.Executor
 
                         if (compiled.HasErrors)
                         {
-                            result.Message = "变更单元编译失败：" + unit.Id;
-                            result.ExitCode = 1;
-                            return result;
+                            throw new CompilationException("变更单元编译失败：" + unit.Id, compiled.Diagnostics);
                         }
 
                         options.WriteLog("  SQL：" + PreviewSql(compiled, dialect));
@@ -184,23 +184,7 @@ namespace DbChronicle.Migrations.Executor
                             continue;
                         }
 
-                        List<string> unitFailures;
-                        try
-                        {
-                            unitFailures = ExecuteUnit(executor, store, unit, compiled, options);
-                        }
-                        catch (StatementExecutionException ex)
-                        {
-                            result.Message = "执行失败：" + unit.Id + "；" + ex.Describe();
-                            result.ExitCode = 3;
-                            return result;
-                        }
-                        catch (Exception ex)
-                        {
-                            result.Message = "执行失败：" + unit.Id + "：" + ex.Message;
-                            result.ExitCode = 3;
-                            return result;
-                        }
+                        var unitFailures = ExecuteUnit(executor, store, unit, compiled, options);
 
                         if (unitFailures != null && unitFailures.Count > 0)
                         {
@@ -217,19 +201,26 @@ namespace DbChronicle.Migrations.Executor
                         WriteAuditLog(unit, compiled, options);
                     }
 
-                    result.Success = result.FailedCount == 0;
-                    if (!result.Success)
+                    if (result.FailedCount > 0)
                     {
-                        result.ExitCode = 3;
-                        result.Message = "部分失败：" + result.FailedCount + " 个单元（failures 含明细）";
+                        throw new MigrationFailedException("部分失败：" + result.FailedCount + " 个单元（failures 含明细）",
+                            result.Failures, result.Diagnostics, result.AppliedCount, result.SkippedCount);
                     }
+
+                    result.Success = true;
                     return result;
                 }
                 finally
                 {
                     if (dbLock != null)
                     {
-                        dbLock.Dispose();
+                        try
+                        {
+                            dbLock.Dispose();
+                        }
+                        catch
+                        {
+                        }
                     }
                 }
             }
@@ -253,9 +244,7 @@ namespace DbChronicle.Migrations.Executor
             var directory = _config.ResolveVersionLogPath();
             if (string.IsNullOrEmpty(directory))
             {
-                result.Message = "未配置 version_log 目录";
-                result.ExitCode = 1;
-                return result;
+                throw new MigrationConfigurationException("未配置 version_log 目录");
             }
 
             var dialect = DialectFactory.Create(_config.Database.Dialect, _config.Database.Version,
@@ -277,9 +266,7 @@ namespace DbChronicle.Migrations.Executor
                 }
                 catch (Exception ex)
                 {
-                    result.Message = "读取版本表失败：" + ex.Message;
-                    result.ExitCode = 5;
-                    return result;
+                    throw new MigrationEnvironmentException("读取状态文件失败：" + ex.Message);
                 }
 
                 var writer = new VersionLogWriter(directory);
@@ -376,8 +363,7 @@ namespace DbChronicle.Migrations.Executor
             var unit = units.FirstOrDefault(x => string.Equals(x.Id, options.MarkAppliedChangeId, StringComparison.OrdinalIgnoreCase));
             if (unit == null)
             {
-                result.Message = "未找到变更单元：" + options.MarkAppliedChangeId;
-                return result;
+                throw new MigrationConfigurationException("未找到变更单元：" + options.MarkAppliedChangeId);
             }
 
             store.MarkAppliedManually(unit.Id, unit.Release, unit.Checksum, _config.Database.Dialect,

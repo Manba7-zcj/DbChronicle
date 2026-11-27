@@ -54,7 +54,7 @@ namespace DbChronicle.Cli.Tests
                 + "<changeUnit id=\"20261023_110000_b2c3d4\" author=\"tester\" release=\"20261023\">\n"
                 + "  <description>bad</description>\n"
                 + "  <table name=\"t\" action=\"ALTER\">\n"
-                + "    <column name=\"c\" action=\"ADD\" type=\"String\" nullable=\"true\"/>\n"
+                + "    <column name=\"c\" action=\"DROP\"/>\n"
                 + "  </table>\n"
                 + "</changeUnit>\n",
                 new UTF8Encoding(false));
@@ -179,6 +179,37 @@ namespace DbChronicle.Cli.Tests
             Assert.Equal(ExitCodes.Success, LastExit);
             Assert.Single(Directory.GetFiles(outputDirectory, "*.sql"));
             Assert.Single(File.ReadAllLines(Path.Combine(outputDirectory, "_units.txt")));
+        }
+
+        [Fact]
+        public void Release_ShouldFreezeManifestAndRefuseOverwrite()
+        {
+            var directory = CreateProject();
+            var args = CliArguments.Parse(new[]
+            {
+                "--config", Path.Combine(directory, ConfigLoader.DefaultFileName),
+                "--freeze", "20261023"
+            });
+
+            var output = Capture(() => Commands.Release(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+            Assert.Contains("已封版", output);
+            Assert.True(File.Exists(Path.Combine(directory, "releases", "20261023.release.xml")));
+            Assert.Throws<CliFailureException>(() => Commands.Release(args));
+        }
+
+        [Fact]
+        public void Compile_ShouldRejectInvalidChain()
+        {
+            var directory = CreateProject();
+            var args = CliArguments.Parse(new[]
+            {
+                "--config", Path.Combine(directory, ConfigLoader.DefaultFileName),
+                "--strict-reference-check"
+            });
+
+            Assert.Throws<CliFailureException>(() => Commands.Compile(args));
         }
 
         [Fact]
@@ -321,6 +352,7 @@ namespace DbChronicle.Cli.Tests
             Directory.CreateDirectory(Path.Combine(directory, "migrations"));
 
             var config = new DbChronicleConfig { BaseDirectory = directory };
+            config.Options.StrictReferenceCheck = false;
             ConfigLoader.Save(config, Path.Combine(directory, ConfigLoader.DefaultFileName));
 
             File.WriteAllText(Path.Combine(directory, "migrations", "20261023_100000_a1b2c3_add_phone.xml"),

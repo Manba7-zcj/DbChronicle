@@ -31,6 +31,11 @@ namespace DbChronicle.Configuration
             return ResolvePath(Paths.Output);
         }
 
+        public string ResolveReleasesPath()
+        {
+            return ResolvePath(Paths.Releases);
+        }
+
         public string ResolveBaselinePath()
         {
             if (string.IsNullOrEmpty(Baseline.File))

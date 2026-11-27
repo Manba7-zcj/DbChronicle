@@ -15,13 +15,13 @@ namespace DbChronicle.Models
 
         public string Message { get; set; }
 
-        /// <summary>对齐 CLI 退出码（0/1/3/4/5）；进程内调用可忽略，仅用于诊断。</summary>
+        /// <summary>成功时为空；任何失败都通过异常（DbChronicleException 及其子类）传递。</summary>
         public int? ExitCode { get; set; }
 
-        /// <summary>continueOnError 模式下的失败明细（单元 / 表 / 原因）。</summary>
+        /// <summary>continueOnError 模式下的失败明细；失败时由 MigrationFailedException 携带。</summary>
         public IReadOnlyList<string> Failures { get; set; } = new List<string>();
 
-        /// <summary>continueOnError 模式下失败的单元数。</summary>
+        /// <summary>continueOnError 模式下失败的单元数；失败时由 MigrationFailedException 携带。</summary>
         public int FailedCount { get; set; }
 
         public IReadOnlyList<CompileDiagnostic> Diagnostics { get; set; } = new List<CompileDiagnostic>();

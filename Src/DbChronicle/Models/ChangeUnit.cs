@@ -12,6 +12,7 @@ namespace DbChronicle.Models
         public string Description { get; set; } = "";
         public string SourcePath { get; set; }
         public string Checksum { get; set; }
+        public bool LateSubmission { get; set; }
         public List<string> Depends { get; } = new List<string>();
         public List<SchemaOperation> Operations { get; } = new List<SchemaOperation>();
         public List<CompileDiagnostic> Diagnostics { get; } = new List<CompileDiagnostic>();

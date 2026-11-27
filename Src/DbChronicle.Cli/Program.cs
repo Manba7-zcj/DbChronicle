@@ -62,6 +62,8 @@ namespace DbChronicle.Cli
                             return Commands.GenerateCode(arguments);
                         case "rollback":
                             return Commands.Rollback(arguments);
+                        case "release":
+                            return Commands.Release(arguments);
                         case "plugin":
                             return Commands.Plugin(arguments);
                         default:
@@ -128,6 +130,7 @@ namespace DbChronicle.Cli
                     "no-indexes", "no-foreign-keys", "no-check-constraints", "no-comments" } },
                 { "codegen", new[] { "language", "lang", "output-dir", "out", "namespace", "no-comments", "no-column-mapping" } },
                 { "rollback", new[] { "target-release", "to-release", "apply" } },
+                { "release", new[] { "freeze", "sealed-by" } },
                 { "plugin", new string[0] }
             };
 
@@ -137,6 +140,8 @@ namespace DbChronicle.Cli
             "quote-identifiers", "no-quote-identifiers", "sql-comments", "no-sql-comments",
             "include-rollback", "no-include-rollback",
             "incremental-modify", "no-incremental-modify", "statement-delimiter",
+            "strict-reference-check", "no-strict-reference-check",
+            "accept-late-submission", "releases", "capability-level", "version-drift-policy",
             "lock-timeout", "commit-scope", "commit-batch-size" };
 
         private static void WarnUnknownOptions(string command, CliArguments arguments)
@@ -215,6 +220,7 @@ namespace DbChronicle.Cli
             Console.WriteLine("                        （--include-tables a,b / --exclude-tables c / --no-indexes 等开关）");
             Console.WriteLine("  codegen               由 migrations 生成实体代码（--language <lang> --output-dir <dir> --namespace <ns>）");
             Console.WriteLine("  rollback --target-release <yyyyMMdd>  生成回滚 SQL（默认 dry-run，加 --apply 执行）");
+            Console.WriteLine("  release --freeze <yyyyMMdd>           生成不可变封版清单（releases/<release>.release.xml，可加 --sealed-by）");
             Console.WriteLine("  plugin list|disable|enable <name> 查看/启停已部署的插件（状态存用户目录，工具升级后仍有效）");
             Console.WriteLine();
             Console.WriteLine("通用选项：--config <path>（默认 DbchronicleConfig.xml，缺失时自动生成）");
@@ -227,6 +233,10 @@ namespace DbChronicle.Cli
             Console.WriteLine("          --quote-identifiers / --no-quote-identifiers / --sql-comments / --no-sql-comments");
             Console.WriteLine("          --include-rollback / --no-include-rollback");
             Console.WriteLine("          --incremental-modify / --no-incremental-modify / --statement-delimiter <s>");
+            Console.WriteLine("          --strict-reference-check / --no-strict-reference-check（引用存在性检查，默认开；零配置模式默认关）");
+            Console.WriteLine("          --accept-late-submission（允许迟交：E121 降为 W046）");
+            Console.WriteLine("          --releases <dir> 封版清单目录（默认 ./releases）");
+            Console.WriteLine("          --capability-level <v> / --version-drift-policy <warn|strict>（跨数据库版本的能力级别检查）");
             Console.WriteLine("          --lock-timeout <sec> / --commit-scope <unit|table|batch> / --commit-batch-size <n>");
             Console.WriteLine("          以上参数与配置文件中的同名字段一一对应，全部可由命令行覆盖");
             Console.WriteLine("输出参数：--output-dir <dir> 指定输出目录；--output-file <file> 指定输出文件");

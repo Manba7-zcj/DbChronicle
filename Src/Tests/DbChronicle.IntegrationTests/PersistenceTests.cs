@@ -56,9 +56,9 @@ namespace DbChronicle.IntegrationTests
             Assert.Equal(2, second.SkippedCount);
 
             File.AppendAllText(phonePath, "\n");
-            var third = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, false);
-            Assert.False(third.Success);
-            Assert.Contains("checksum", third.Message);
+            var error = Assert.Throws<MigrationStateException>(
+                () => { Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, false); });
+            Assert.Contains("checksum", error.Message);
         }
 
         [Fact]

@@ -20,5 +20,5 @@
   <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
            statementDelimiter=";"
            lockTimeoutSeconds="10" incrementalModify="false"
-           commitScope="table" commitBatchSize="10" />
+           commitScope="table" commitBatchSize="10" strictReferenceCheck="false" />
 </dbchronicle>

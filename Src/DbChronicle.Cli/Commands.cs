@@ -150,10 +150,12 @@ namespace DbChronicle.Cli
 
         private static DbChronicleConfig CreateInlineConfig()
         {
-            return new DbChronicleConfig
+            var config = new DbChronicleConfig
             {
                 BaseDirectory = Directory.GetCurrentDirectory()
             };
+            config.Options.StrictReferenceCheck = false;
+            return config;
         }
 
         private static void ApplyConfigOverrides(DbChronicleConfig config, CliArguments args)
@@ -200,6 +202,29 @@ namespace DbChronicle.Cli
                 config.Paths.Output = output;
             }
 
+            var releases = args.Get("releases", null);
+            if (!string.IsNullOrEmpty(releases))
+            {
+                config.Paths.Releases = releases;
+            }
+
+            var capabilityLevel = args.Get("capability-level", null);
+            if (capabilityLevel != null)
+            {
+                config.Database.CapabilityLevel = capabilityLevel;
+            }
+
+            var driftPolicy = args.Get("version-drift-policy", null);
+            if (!string.IsNullOrEmpty(driftPolicy))
+            {
+                config.Options.VersionDriftPolicy = driftPolicy.Trim().ToLowerInvariant();
+            }
+
+            if (args.Has("accept-late-submission"))
+            {
+                config.Options.AllowLateSubmission = true;
+            }
+
             var baseline = args.Get("baseline", null);
             if (baseline != null)
             {
@@ -218,6 +243,7 @@ namespace DbChronicle.Cli
             ApplyBoolOption(args, "sql-comments", "no-sql-comments", value => config.Options.IncludeComments = value);
             ApplyBoolOption(args, "include-rollback", "no-include-rollback", value => config.Options.IncludeRollback = value);
             ApplyBoolOption(args, "incremental-modify", "no-incremental-modify", value => config.Options.IncrementalModify = value);
+            ApplyBoolOption(args, "strict-reference-check", "no-strict-reference-check", value => config.Options.StrictReferenceCheck = value);
 
             var delimiter = args.Get("statement-delimiter", null);
             if (!string.IsNullOrEmpty(delimiter))

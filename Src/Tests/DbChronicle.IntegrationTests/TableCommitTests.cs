@@ -33,10 +33,12 @@ namespace DbChronicle.IntegrationTests
             var dbPath = Path.Combine(directory, "table-commit.db");
             var logs = new List<string>();
 
-            var first = Apply(config, units, dbPath, logs);
-            Assert.False(first.Success);
-            Assert.Contains("t2", first.Message);
-            Assert.Contains("已完成 1", first.Message);
+            var first = Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, units, dbPath, logs);
+            });
+            Assert.Contains("t2", first.Describe());
+            Assert.Contains("已完成 1", first.Describe());
             Assert.Contains(logs, x => x.Contains("  SQL：") && x.Contains("\"*\""));
             Assert.Contains(logs, x => x.Contains("表名以 * 表示"));
 
@@ -53,9 +55,11 @@ namespace DbChronicle.IntegrationTests
             Assert.True(store.LoadAll().Single(x => x.ChangeId == units[0].Id).HasFailure);
 
             logs.Clear();
-            var second = Apply(config, units, dbPath, logs);
-            Assert.False(second.Success);
-            Assert.Contains("t2", second.Message);
+            var second = Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, units, dbPath, logs);
+            });
+            Assert.Contains("t2", second.Describe());
         }
 
         [Fact]
@@ -78,8 +82,10 @@ namespace DbChronicle.IntegrationTests
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "batch-commit.db");
 
-            var result = Apply(config, units, dbPath, new List<string>());
-            Assert.False(result.Success);
+            Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, units, dbPath, new List<string>());
+            });
 
             using (var executor = new SqliteExecutor("Data Source=" + dbPath))
             {
@@ -110,8 +116,10 @@ namespace DbChronicle.IntegrationTests
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "unit-commit.db");
 
-            var result = Apply(config, units, dbPath, new List<string>());
-            Assert.False(result.Success);
+            Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, units, dbPath, new List<string>());
+            });
 
             using (var executor = new SqliteExecutor("Data Source=" + dbPath))
             {
@@ -136,16 +144,14 @@ namespace DbChronicle.IntegrationTests
 
             var factory = new AdoNetExecutorFactory("sqlite");
             var executor = new SchemaExecutor(config, new NoTransactionExecutorFactory(factory), factory);
-            var result = executor.Apply(units, new ApplyOptions
+            var error = Assert.Throws<MigrationFailedException>(() => executor.Apply(units, new ApplyOptions
             {
                 ConnectionString = "Data Source=" + dbPath,
                 AppliedBy = "tester",
                 LockTimeoutSeconds = 5
-            });
+            }));
 
-            Assert.False(result.Success);
-            Assert.Equal(1, result.FailedCount);
-            Assert.Contains(result.Failures, x => x.Contains("e2"));
+            Assert.Contains(error.Failures, x => x.Contains("e2"));
             using (var db = new SqliteExecutor("Data Source=" + dbPath))
             {
                 Assert.True(TableExists(db, "e1"));
@@ -169,11 +175,9 @@ namespace DbChronicle.IntegrationTests
             var dbPath = Path.Combine(directory, "continue-table.db");
             var logs = new List<string>();
 
-            var result = Apply(config, units, dbPath, logs, continueOnError: true);
+            var error = Assert.Throws<MigrationFailedException>(() => Apply(config, units, dbPath, logs, continueOnError: true));
 
-            Assert.False(result.Success);
-            Assert.Equal(1, result.FailedCount);
-            Assert.Contains(result.Failures, x => x.Contains("c2"));
+            Assert.Contains(error.Failures, x => x.Contains("c2"));
             Assert.Contains(logs, x => x.Contains("完成：共 2 张表，执行 1，跳过 0，失败 1"));
             Assert.Contains(logs, x => x.Contains("表 c2："));
             Assert.Equal(1, logs.Count(x => x.Contains("表 c2：")));
@@ -201,11 +205,11 @@ namespace DbChronicle.IntegrationTests
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "continue-unit.db");
 
-            var result = Apply(config, units, dbPath, new List<string>(), continueOnError: true);
+            var error = Assert.Throws<MigrationFailedException>(
+                () => Apply(config, units, dbPath, new List<string>(), continueOnError: true));
 
-            Assert.False(result.Success);
-            Assert.Equal(1, result.FailedCount);
-            Assert.Equal(1, result.AppliedCount);
+            Assert.Single(error.Failures);
+            Assert.Equal(1, error.AppliedCount);
             using (var executor = new SqliteExecutor("Data Source=" + dbPath))
             {
                 Assert.True(TableExists(executor, "d2"));

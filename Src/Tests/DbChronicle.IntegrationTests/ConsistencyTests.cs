@@ -30,15 +30,18 @@ namespace DbChronicle.IntegrationTests
             var config = CreateConfig(directory);
             var dbPath = Path.Combine(directory, "test.db");
 
-            var first = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath);
-            Assert.False(first.Success);
+            Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath);
+            });
 
             var records = new VersionStore(config).LoadAll();
             Assert.DoesNotContain(records, x => x.ChangeId == FailedUnitId);
 
-            var second = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath);
-            Assert.False(second.Success);
-            Assert.Equal(0, second.AppliedCount);
+            Assert.Throws<StatementExecutionException>(() =>
+            {
+                Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath);
+            });
         }
 
         [Fact]
@@ -59,9 +62,9 @@ namespace DbChronicle.IntegrationTests
 
             File.Delete(unitPath);
 
-            var second = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath);
-            Assert.False(second.Success);
-            Assert.Contains("文件丢失", second.Message);
+            var error = Assert.Throws<MigrationStateException>(
+                () => { Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath); });
+            Assert.Contains("文件丢失", error.Message);
         }
 
         [Fact]
@@ -78,15 +81,15 @@ namespace DbChronicle.IntegrationTests
             var config = CreateConfig(directory);
             var dbPath = Path.Combine(directory, "test.db");
 
-            var first = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, noTransaction: true);
-            Assert.False(first.Success);
+            Assert.Throws<MigrationFailedException>(
+                () => { Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, noTransaction: true); });
 
             var store = new VersionStore(config);
             var afterFirst = store.LoadStatements("20261023_120000_e7f8a9");
             Assert.True(afterFirst.ContainsKey(0));
 
-            var second = Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, noTransaction: true);
-            Assert.False(second.Success);
+            Assert.Throws<MigrationFailedException>(
+                () => { Apply(config, new ChangeUnitLoader(config).LoadAll(), dbPath, noTransaction: true); });
 
             var afterSecond = store.LoadStatements("20261023_120000_e7f8a9");
             Assert.True(afterSecond.ContainsKey(0));
@@ -118,6 +121,7 @@ namespace DbChronicle.IntegrationTests
             config.Paths.VersionLog = "./version_log/${environment}";
             config.Paths.Output = "./output";
             config.Options.IncrementalModify = true;
+            config.Options.StrictReferenceCheck = false;
             return config;
         }
 

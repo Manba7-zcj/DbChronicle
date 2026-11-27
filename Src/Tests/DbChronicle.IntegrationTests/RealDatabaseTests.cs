@@ -91,9 +91,9 @@ namespace DbChronicle.IntegrationTests
                 Assert.Equal(2, second.SkippedCount);
 
                 File.AppendAllText(changePath, "\n");
-                var third = schemaExecutor.Apply(new ChangeUnitLoader(config).LoadAll(), options);
-                Assert.False(third.Success);
-                Assert.Contains("checksum", third.Message);
+                var error = Assert.Throws<MigrationStateException>(
+                    () => schemaExecutor.Apply(new ChangeUnitLoader(config).LoadAll(), options));
+                Assert.Contains("checksum", error.Message);
 
                 var drift = schemaExecutor.CheckDrift(new ChangeUnitLoader(config).LoadAll(), connectionString);
                 Assert.False(drift.HasDrift);

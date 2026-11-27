@@ -517,7 +517,7 @@ Finding
 
 | 配置项 | 默认 | 作用 |
 |---|---|---|
-| `strictReferenceCheck` | **true** | L2 存在性，建议默认开 |
+| `strictReferenceCheck` | **true** | L2 存在性，建议默认开；表由既有系统创建（链里没有 `CREATE`）或零配置模式时设为 false，否则会报 E111 |
 | `destructiveSeverity` | `error` | 可降为 warning（测试环境） |
 | `compatBreakingSeverity` | `warning` | B 类，CI 建议 error |
 | `dataDependentSeverity` | `warning` | V 类 |
@@ -929,8 +929,15 @@ M3 用台账 + 重编译结果交叉验证：即使快照丢失，也能知道"�
 
 ---
 
-## 15. 基线种子：把"已确认的结构"固化为新起点
+### 14.7 读取顺序与排序
 
+`ChangeUnitLoader.LoadAll()` 先按文件名读取，再统一 `Sort(units)`：`OrderBy(release).ThenBy(id)`（均 OrdinalIgnoreCase）。因此**文件在磁盘上的读取顺序不影响执行顺序**；`apply` 在 `ApplyWith` 内还会再排一次，`compile` / `check` / 内嵌 API 走的也是排好序的列表。`release` 由解析器校验为 `yyyyMMdd`（E006），所以字符串比较等同时间比较；基线 `00000000` 自然排在最前。
+
+排序解决不了的是**运行期已经越过某个版本**的场景：例如状态文件里已应用 20261126，之后仓库里才补进一个 20261124 的单元。排序会把它放在 20261126 之前，但 20261126 已应用会被跳过，实际执行顺序变成"先 20261126、后 20261124"。这是 E127：待应用单元的 `(release, id)` 低于已应用最高版本 → Error，`apply` **直接抛 `ChainValidationException`（携带 Diagnostics）拒绝执行**，20261124 不会被执行；`--accept-late-submission` / `options.allowLateSubmission=true` 时降为 W046（显式接受迟交）。
+
+`release` 写成 7 位（如 `2026115`）不会被"排序错"，而是解析阶段直接 E006（格式必须 `yyyyMMdd`）。
+
+## 15. 基线种子：把"已确认的结构"固化为新起点
 ### 15.1 想法与价值
 
 ```
@@ -1126,6 +1133,35 @@ db-chronicle seed list
 
 ---
 
+## 16. 实现状态（2026-11-27）
+
+端到端流程、异常契约与配置项见 `Docs/DbChronicle 实现总览.md`；本节只记录检查项的实现状态。
+
+| 范围 | 状态 | 落点 |
+|---|---|---|
+| L2 E111–E119 | 已实现（含通配符 `table="*"` 跳过、`strictReferenceCheck`、同单元 `CREATE` 列进入已知集合） | `Compilation/Checks/ChangeChecker.cs` |
+| L2 去隐式建表 | 检查器内推进状态后按“未在本单元显式创建”剪枝，后续单元不再被虚假表/列污染；`StructureModelBuilder` 保持不变（编译路径仍容错，非法链由检查器拦截） | `ChangeChecker.PruneImplicitState` |
+| L3 E119 | 已实现 | `CheckStageBeforeBoundary` |
+| L5 E054–E058 / W034–W040 | 已实现（缺省 `where`、类型/长度/精度收窄、字符集收窄、主键/自增变更、约束收紧、Text→String、重命名、类型族、字符集/排序规则、破坏性 rawSql、Decimal 缺省精度） | `Compilation/Checks/ConsequenceChecker.cs` |
+| 四入口一致 | `check` / `compile` / `apply` / `EmbeddedApi.Check()` 均执行链校验；`apply` 链校验失败返回 `ExitCode=1` 并带 `Diagnostics` | `Commands.Schema`、`SchemaExecutor.ApplyWith`、`DefaultDbChronicle` |
+| 门禁开关 | `options.strictReferenceCheck`（默认 true；零配置模式默认 false） | `OptionSettings` / `ConfigLoader` / CLI `--strict-reference-check` |
+
+| C2 发布版本链 | E121 迟交、W046 补丁迟交、E122 封版清单漂移、E123 版本空洞、E127 升级顺序倒挂、`release --freeze`、`--accept-late-submission` 已实现；E124（链头锚定）/ W047（多链头）未做 | `Compilation/Checks/ReleaseChecker.cs`、`Migrations/State/ReleaseManifestStore.cs`、`Commands.Release.cs` |
+| C3 能力版本链 | `database.capabilityLevel` + `options.versionDriftPolicy`：E120（strict）、W043（warn）、W045（旧状态缺字段）已实现；W044（降级台账）、SQL 快照 diff 未做 | `Compilation/Checks/CapabilityChecker.cs`、`VersionStore` |
+
+未实现（按分期保留）：
+
+- W041（时间小数秒无法用结构化节点表达）、W042（PG `BYTEA` 无长度约束）——需要方言感知与更细的类型模型，留 v1.1。
+- V 类探针 SQL（W034 的 `ProbeSql`）与 `verifyDataBeforeTighten`——v1.1。
+- C2 的 E124（链头锚定）/ W047（同 release 多链头）——默认关闭的可选机制，未实现。
+- C3 的 W044（历史降级项台账）与 SQL 快照 diff（W043 目前只比较能力级别字段，不比较产物）——未实现。
+- 基线种子（E125/E126、W048/W049）——未实现。
+- 顺序推进性能（§7 硬约束）：仍为每单元全链重放，N 大时是已知成本，未在本轮改动。
+
+测试：`Src/Tests/DbChronicle.Tests/ChainCheckTests.cs` 覆盖 E111–E119、E054–E058、W034–W040、通配符、严格/宽松模式、隐式状态剪枝、数据节点与种子行数；`ReleaseChainTests.cs` 覆盖 E121/W046/E122/E123/E127、封版清单不可覆盖、读取顺序无关（按 release/id 排序）与 W043/W045/E120。
+
+---
+
 ## 附录 A：诊断码分配
 
 **职责归属**（§2.1）：A 类不可豁免，B 类需人工确认与备份后直接执行。
@@ -1155,6 +1191,7 @@ db-chronicle seed list
 | E121 | 发布版本 | 迟交：`id` 日期晚于 `release`，且非补丁/无 `lateSubmission` 声明 | 新增 |
 | E122 | 发布版本 | 已封版 release 下出现清单外单元、checksum 变化或文件缺失 | 新增 |
 | E123 | 发布版本 | 版本空洞：已封版 release 的单元未在本环境应用 | 新增 |
+| E127 | 发布版本 | 升级顺序倒挂：待应用单元的 `(release, id)` 低于状态文件中已应用的最高版本 | 新增 |
 | E124 | 发布版本 | 链头锚定失败：某 release 首个单元未 `depends` 指向发布时记录的 `chainHead`（可选机制） | 新增 |
 | E125 | 基线种子 | 生成种子前 drift 校验非空（模型与库不一致），拒绝固化 | 新增 |
 | E126 | 基线种子 | 导入种子时内容哈希与 meta 不符（文件被改或版本错配） | 新增 |

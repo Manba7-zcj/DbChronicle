@@ -1154,6 +1154,8 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | 不写 `comment`        | 保持不变                          | 目标无注释                 |
 | `comment=""`          | 清空注释                          | 清空注释                   |
 
+`defaultValue` 的字面量还要与列类型匹配（E060）：Int8/16/32/64 只接受整数，Float32/64 与 Decimal 只接受数字，`Boolean` 只接受 `true` / `false`；带引号的字符串、裸词（如 `in`）、小数写到整数列都会报错。`none` / `null` / 函数形式（`CURRENT_TIMESTAMP`、`now()`、`(unix_timestamp())`）不参与该校验；`MODIFY` 未写 `type` 时（增量模式）无法判断类型，也跳过校验。
+
 **为什么默认是 incremental：** `MODIFY` 的直觉语义就是"只写变化项"，用户不该为了改一个长度去抄一遍整列定义。历史文件不受影响：按全量写的文件，显式属性会完整覆盖基底，结果与原语义一致；只有"故意省略某属性以清空它"这种写法会被补回原值，而这类意图现在有显式表达（`defaultValue="none"` / `comment=""`），确需旧行为时把开关置 `false`。
 
 **各方言对增量模式的实际需要：**
@@ -1407,6 +1409,7 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 | `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言  | 编译时跳过 + 警告（W032）                    |
 | `unsigned=true` 仅对整数类型有效                                         | 解析失败                                     |
 | `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                                     |
+| `defaultValue` 必须与列类型匹配：数值列只接受数字、`Boolean` 只接受 `true` / `false` | 解析失败（E060）                    |
 | 数据操作节点的 `stage` 仅允许 `before` / `after`                         | 解析失败                                     |
 | `DateTimeOffset` 映射到 MySQL/MariaDB 时输出警告                         | 警告（W003）                                 |
 | 文件含 CRLF 或 UTF-8 BOM（会导致 checksum 漂移）                         | 警告                                         |
@@ -2702,6 +2705,7 @@ public sealed class CompileDiagnostic
 | E028      | 增量模式的 `MODIFY` 未声明任何属性                                                                |
 | E029      | 同一变更单元内同一表同一列重复出现                                                                |
 | E040      | 基线已冻结，只允许 `CREATE` / `ADD` 类操作                                                        |
+| E060      | `defaultValue` 与列类型不匹配（数值列写了字符串 / 小数、`Boolean` 写了非 `true` / `false`）        |
 | E101–E105 | 重复 ADD / MODIFY 目标冲突 / ADD-DROP 矛盾 / RENAME 目标冲突 / RENAME 后仍引用旧名                |
 | E106–E110 | DROP 不存在列 / `depends` 指向不存在的单元 / 补丁缺 `depends` / 跨单元顺序矛盾 / 变更单元 id 重复 |
 
@@ -3198,6 +3202,24 @@ var result = db.DbUpgrade();
 ```
 
 同一实例还提供 `Compile`（只生成 SQL，变更目录为空或 `changeId` 未命中时抛 `InvalidOperationException`）、`Check`（解析 + 方言编译 + 变更链语义校验，与 CLI `check` 等价，错误与警告一并返回）、`Status`（读本地状态文件，含失败记录）、`PendingUnits`（未应用单元）、`LoadUnits`，便于宿主自己做流程编排（例如启动时只 `Check`、发布流水线里才 `DbUpgrade`）。CLI 属于"工具"形态，内部直接用编排器（`SchemaExecutor` / `RollbackService`）以覆盖 `--backfill-logs` / `--check-drift` / `rollback` 等运维命令；宿主应用统一走工厂入口即可。
+
+**异常契约（内核不吞异常）：** 内核只负责抛，调用方负责接。
+
+| 场景 | 内核行为 | CLI | 宿主（API） |
+| --- | --- | --- | --- |
+| 语句执行失败（含驱动异常） | 抛 `StatementExecutionException`（表名、语句序号、SQL、内部异常） | `Commands.Apply` 捕获，`Describe()` 输出，退出码 3 | 直接抛出，宿主 `try/catch` |
+| 链校验失败（引用 / 发布版本 / 升级顺序 / 能力级别） | 抛 `ChainValidationException`（带 `Diagnostics`） | 打印每条诊断，退出码 1 | 直接抛出，读 `Diagnostics` |
+| 空目录 / 干跑+标记已应用 | 抛 `MigrationConfigurationException` | 退出码 1 | 直接抛出 |
+| checksum 不一致 / 已应用文件丢失 | 抛 `MigrationStateException` | 退出码 3 | 直接抛出 |
+| 库级锁被占用 | 抛 `MigrationLockException` | 退出码 4 | 直接抛出 |
+| 编译错误 | 抛 `CompilationException`（带 `Diagnostics`） | 打印诊断，退出码 1 | 直接抛出 |
+| 方言不匹配 / 取表清单失败 | 抛 `MigrationEnvironmentException` | 退出码 5 | 直接抛出 |
+| `ContinueOnError` 下的逐表 / 逐语句失败 | 先继续执行，结束时抛 `MigrationFailedException`（带 `Failures` / `AppliedCount`） | 逐条输出后退出码 3 | 直接抛出，读 `Failures` |
+| 状态文件损坏 / 目录无权限 / 驱动异常 | 原样上抛（`XmlException`、`IOException`、驱动异常） | 捕获，退出码 5 | 直接抛出，宿主 `try/catch` |
+
+所有 `DbChronicleException` 子类都带 `ExitCode`（1/3/4/5），`ApplyResult` / `DbUpgradeResult` 只在成功时返回（`Success=true`、`ExitCode=null`）。
+
+`Program.Main` 在最外层统一 `catch`（`CliFailureException` → 对应码，其余 → 3/5），所以内核抛异常不会让 CLI 进程崩溃；宿主侧必须在调用 `DbUpgrade` / `Compile` / `Status` / `PendingUnits` 处自行 `try/catch`。
 
 **约束：** 一个数据库对应一套变更链（`change_id` 是状态文件中已应用记录的唯一键）。需要多套独立变更链时，用不同的数据库实例（演示见 `Test/DbChronicle.Demo --embedded`，它会创建独立的 `dbchronicle_embedded_demo` 库）。
 
@@ -4710,8 +4732,28 @@ MySQL 实测中发现并修复的问题（已加回归测试）：
 | 并发              | `DbUpgrade` 按状态文件路径做进程内互斥；未同时提供 `ConnectionString` + `LockFactory` 时通过 `Log` 告警（跨进程互斥需两者）                |
 | 路径              | 相对 `ConfigPath` 按 `AppContext.BaseDirectory` 解析；`Config.BaseDirectory` 为空时补齐，避免 Windows 服务下相对路径落到 `System32`        |
 | 结果语义          | `DbUpgradeResult.Sql` 注释明确「含已跳过单元」；`ExitCode` 注明对齐 CLI 退出码，进程内调用可忽略                                          |
+| 异常契约          | 内核不再把执行异常吞成 `Message`：`ApplyWith` 放开 `StatementExecutionException` 与状态文件异常，CLI 在命令边界按类型映射退出码（执行 3 / 环境 5），API 抛给宿主 `try/catch`；`ContinueOnError` 结束时抛 `MigrationFailedException` |
 
-验证：核心库与整个解决方案 `dotnet build` 0 错误（仅 net6.0 EOL 提示）；`DbChronicle.Tests` 198 通过（含新增 8 条内嵌 API 用例）、`Scanner.Tests` 7 通过、`IntegrationTests` 35 通过。
+验证：核心库与整个解决方案 `dotnet build` 0 错误（仅 net6.0 EOL 提示）；`DbChronicle.Tests` 200 通过（含新增 10 条内嵌 API / 异常契约用例）、`Scanner.Tests` 7 通过、`IntegrationTests` 35 通过。
+
+### 16.9 2026-11-27 升级链合法性检查（L2 / L3 / L5）收尾
+
+专题方案见 `Docs/DbChronicle 升级链合法性检查方案.md`，该文档 §16 记录逐项状态；当前代码的实际流程、异常契约与配置见 `Docs/DbChronicle 实现总览.md`。本轮落点：
+
+| 项 | 内容 |
+| --- | --- |
+| L2 引用存在性 | E111–E119 全部接入；`table="*"` 占位符跳过；同单元 `CREATE TABLE` 的列进入已知集合（E113）；检查器推进状态时剪掉隐式建表/建列，后续单元不再被虚假状态污染 |
+| L3 时序 | E119（`stage="before"` 不得引用本单元新建的表/列） |
+| L5 后果 | E054（类型/长度收窄）、E055（主键/自增变更）、E056（数据改写缺 `where`）、E057（精度损失）、E058（字符集收窄）、W034（约束收紧）、W035（Text→有界 String）、W036（重命名）、W037（类型族改变）、W038（字符集/排序规则）、W039（破坏性 rawSql）、W040（Decimal 缺省精度） |
+| 数据节点 | `update` / `clean` 的赋值列存在性、`seed` 行值个数（E118） |
+| 四入口一致 | `check` / `compile` / `apply` / `EmbeddedApi.Check()` 均执行链校验；`compile` 与 `apply` 在链非法时直接拒绝（`ExitCode=1`） |
+| 既有表模式 | 新增 `options.strictReferenceCheck`（默认 true，零配置模式默认 false）与 CLI `--strict-reference-check`；Demo 配置设为 false（表由既有系统创建） |
+| C2 发布版本链 | E121（迟交）、W046（补丁迟交）、E122（封版清单漂移）、E123（版本空洞）、E127（升级顺序倒挂：待应用单元低于已应用最高版本）、`release --freeze` 命令、`--accept-late-submission`；清单落在 `paths.releases`（默认 `./releases`）。`apply` 遇链/顺序校验错误抛 `ChainValidationException`（带 Diagnostics），CLI 打印后退出 1 |
+| C3 能力版本链 | `database.capabilityLevel` + `options.versionDriftPolicy`：E120（strict）、W043（warn）、W045（旧状态缺字段）；状态文件 `<applied>` 记录 `dialectVersion` / `capabilityLevel` |
+
+未实现并按分期保留：W041 / W042、V 类探针（`verifyDataBeforeTighten`）、C2 的 E124 / W047、C3 的 W044 与 SQL 快照 diff、基线种子（§15）、检查的顺序推进性能优化。
+
+验证：`DbChronicle.Tests` 264 通过（`ChainCheckTests` 27 + `ReleaseChainTests` 16）、`Cli.Tests` 44、`IntegrationTests` 35、`Scanner.Tests` 7；`Test/DbChronicle.Demo` 的 `check` 恢复通过（6 个单元，仅剩 W009/W022 提示）。
 
 ---
 

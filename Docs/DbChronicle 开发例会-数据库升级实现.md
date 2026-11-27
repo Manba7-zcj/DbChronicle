@@ -198,7 +198,7 @@ var result = db.DbUpgrade(new DbUpgradeOptions { DryRun = false, AppliedBy = "my
 
 | 成员 | 作用 |
 | --- | --- |
-| `DbUpgrade(options)` | 执行升级；可带 `DryRun` / `AppliedBy` / `ConnectionString` + `LockFactory` / `LockTimeoutSeconds` / `ContinueOnError` / `Restart` / `MarkAppliedChangeId`（与 `DryRun` 互斥）。变更目录为空时返回失败（`ExitCode=1`） |
+| `DbUpgrade(options)` | 执行升级；可带 `DryRun` / `AppliedBy` / `ConnectionString` + `LockFactory` / `LockTimeoutSeconds` / `ContinueOnError` / `Restart` / `MarkAppliedChangeId`（与 `DryRun` 互斥）。所有失败都抛 `DbChronicleException` 子类（配置 1 / 状态 3 / 锁 4 / 环境 5 / 链校验 `ChainValidationException` / 编译 `CompilationException` / 执行 `StatementExecutionException` / 继续模式结束 `MigrationFailedException`），带 `ExitCode` 与诊断；成功才返回 `DbUpgradeResult` |
 | `Compile(changeId?)` | 只编译，不执行；目录为空或 `changeId` 未命中时抛 `InvalidOperationException`，警告写入 `Log` |
 | `Check()` | 解析 + 方言编译 + 变更链语义校验（等价 CLI `check`），返回诊断列表 |
 | `Status()` | 读本地状态文件，返回已应用记录（含失败记录） |
@@ -219,6 +219,7 @@ var result = db.DbUpgrade(new DbUpgradeOptions { DryRun = false, AppliedBy = "my
 | `check` | 否 | 语义检查；`--strict-warnings` 把 W 升级为失败（CI 门禁） |
 | `upgrade`（别名 `apply`） | 是 | 执行升级：`--dry-run` / `--restart` / `--continue-on-error` / `--check-drift` / `--backfill-logs` / `--mark-applied <id>` |
 | `status` | 否 | 读状态文件：当前版本、已应用、待应用（`--release` 过滤） |
+| `release` | 否 | `--freeze <yyyyMMdd>` 生成不可变封版清单（`releases/<release>.release.xml`）；check/apply 据此检查 E121/E122/E123 |
 | `verify` / `verify-checksum` | 否 | 校验已应用文件的 checksum（文件被改/丢失） |
 | `scan` | 视 `--from` | `assembly`（反射，离线）/ `source`（插件扫描）/ `database`（连库只读） |
 | `scan-db` | 是 | `scan --from database` 的别名 |

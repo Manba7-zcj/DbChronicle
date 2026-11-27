@@ -19,6 +19,7 @@ namespace DbChronicle.Models
         /// <summary>
         /// 失败后是否继续执行其余表 / 单元。
         /// null（默认）= 按方言决定：无事务 DDL 的方言（MySQL / MariaDB）继续，事务方言遇错即停。
+        /// 继续模式在结束时抛 MigrationFailedException（携带全部失败明细），不再通过返回值表达失败。
         /// </summary>
         public bool? ContinueOnError { get; set; }
 

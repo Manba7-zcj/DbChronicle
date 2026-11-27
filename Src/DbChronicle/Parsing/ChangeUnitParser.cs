@@ -63,6 +63,7 @@ namespace DbChronicle.Parsing
             unit.Id = Attr(root, "id");
             unit.Author = Attr(root, "author");
             unit.Release = Attr(root, "release");
+            unit.LateSubmission = BoolAttr(root, "lateSubmission") ?? false;
             unit.Description = (string)root.Element("description") ?? "";
 
             foreach (var dependency in root.Elements("depends"))
@@ -790,6 +791,13 @@ namespace DbChronicle.Parsing
                     && definition.Type != LogicalType.DateTimeOffset)
                 {
                     AddError(unit, "E025", tableName, name, "onUpdate 仅对 DateTime / DateTimeOffset 有效");
+                    return null;
+                }
+
+                string defaultValueProblem;
+                if (!DefaultValueValidator.TryValidate(definition.Type.Value, definition.DefaultValue, out defaultValueProblem))
+                {
+                    AddError(unit, DiagnosticCodes.DefaultValueTypeMismatch, tableName, name, defaultValueProblem);
                     return null;
                 }
             }

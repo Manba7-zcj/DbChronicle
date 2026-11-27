@@ -18,6 +18,12 @@ namespace DbChronicle.Embedded
         /// <summary>
         /// 执行升级：读状态文件 → 编译 → 逐条执行 → 写状态文件 → 落审计日志。
         /// 使用工厂注入的 <see cref="Execution.IDbExecutor"/>，核心库不创建连接。
+        /// 异常契约：执行失败抛 <see cref="Migrations.Executor.StatementExecutionException"/>（含原始内部异常）；
+        /// 链校验失败（引用 / 发布版本 / 升级顺序倒挂）抛 <see cref="Migrations.Executor.ChainValidationException"/>（带 Diagnostics）；
+        /// 状态文件 / 目录 / 锁等环境异常原样上抛；宿主需 try/catch。
+        /// 其余失败（空目录、checksum、文件丢失、锁被占、编译错误）同样抛 <see cref="Migrations.Executor.DbChronicleException"/> 子类；
+        /// <see cref="DbUpgradeResult"/> 只在成功时返回（Success=true）。<see cref="DbUpgradeOptions.ContinueOnError"/>
+        /// 先继续执行，结束时抛 <see cref="Migrations.Executor.MigrationFailedException"/>（携带 Failures）。
         /// 跨进程互斥需要同时提供 <see cref="DbUpgradeOptions.ConnectionString"/> 与
         /// <see cref="DbUpgradeOptions.LockFactory"/>；同一进程内的并发调用由组件串行化。
         /// </summary>
@@ -25,7 +31,9 @@ namespace DbChronicle.Embedded
 
         /// <summary>
         /// 只编译生成 SQL（离线，不连库）。changeId 为空表示全部单元。
-        /// 变更目录为空或 changeId 未命中时抛 <see cref="InvalidOperationException"/>；编译错误同样抛异常，警告写入 Log。
+        /// 变更目录为空或 changeId 未命中时抛 <see cref="InvalidOperationException"/>；
+        /// 链校验 / 编译错误抛 <see cref="Migrations.Executor.ChainValidationException"/> /
+        /// <see cref="Migrations.Executor.CompilationException"/>（带 Diagnostics），警告写入 Log。
         /// </summary>
         string Compile(string changeId = null);
 

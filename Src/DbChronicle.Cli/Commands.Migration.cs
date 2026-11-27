@@ -94,6 +94,10 @@ namespace DbChronicle.Cli
                 {
                     backfill = executor.BackfillLogs(units, options);
                 }
+                catch (DbChronicleException ex)
+                {
+                    throw new CliFailureException(ex.ExitCode, ex.Message);
+                }
                 catch (Exception ex)
                 {
                     throw new CliFailureException(ExitCodes.Environment, "补生成日志失败：" + ex.Message);
@@ -113,6 +117,19 @@ namespace DbChronicle.Cli
             try
             {
                 result = executor.Apply(units, options);
+            }
+            catch (StatementExecutionException ex)
+            {
+                throw new CliFailureException(ExitCodes.Execution, "执行失败：" + ex.Describe());
+            }
+            catch (DbChronicleException ex)
+            {
+                foreach (var diagnostic in ex.Diagnostics)
+                {
+                    Console.Error.WriteLine(diagnostic.ToString());
+                }
+
+                throw new CliFailureException(ex.ExitCode, ex.Message);
             }
             catch (Exception ex)
             {
@@ -136,6 +153,14 @@ namespace DbChronicle.Cli
             var config = LoadConfig(args);
             var units = new ChangeUnitLoader(config).LoadAll();
             var applied = LoadApplied(config);
+
+            var runtimeDiagnostics = ChainValidator.ValidateRuntime(units, config, applied);
+            foreach (var diagnostic in runtimeDiagnostics)
+            {
+                Console.Error.WriteLine(diagnostic.ToString());
+            }
+
+            var hasRuntimeError = runtimeDiagnostics.Any(x => x.Severity == DiagnosticSeverity.Error);
 
             var releaseFilter = args.Get("release", null);
             var current = applied
@@ -184,12 +209,12 @@ namespace DbChronicle.Cli
             {
                 Console.WriteLine();
                 Console.WriteLine("提示：执行 db-chronicle apply 应用 " + pending.Count + " 个待应用的变更单元。");
-                return ExitCodes.Pending;
+                return hasRuntimeError ? ExitCodes.Execution : ExitCodes.Pending;
             }
 
             Console.WriteLine();
             Console.WriteLine("数据库已是最新版本。");
-            return ExitCodes.Success;
+            return hasRuntimeError ? ExitCodes.Execution : ExitCodes.Success;
         }
 
         public static int Verify(CliArguments args)

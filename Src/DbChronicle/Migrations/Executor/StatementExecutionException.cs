@@ -5,11 +5,11 @@ namespace DbChronicle.Migrations.Executor
     /// <summary>
     /// 单条语句执行失败：携带表名、语句序号与已完成进度，便于定位到具体表。
     /// </summary>
-    public sealed class StatementExecutionException : Exception
+    public sealed class StatementExecutionException : DbChronicleException
     {
         public StatementExecutionException(string table, int statementIndex, int statementInGroup,
             string sql, int completed, int total, Exception inner)
-            : base(inner == null ? "执行失败" : inner.Message, inner)
+            : base(inner == null ? "执行失败" : inner.Message, 3, inner)
         {
             Table = table;
             StatementIndex = statementIndex;

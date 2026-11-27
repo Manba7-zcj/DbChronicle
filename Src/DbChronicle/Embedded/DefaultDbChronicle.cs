@@ -104,6 +104,22 @@ namespace DbChronicle.Embedded
                 throw new InvalidOperationException("未找到变更单元：" + _config.ResolveMigrationsPath());
             }
 
+            var chainDiagnostics = ChainValidator.Validate(units, _config);
+            var chainErrors = chainDiagnostics.Where(x => x.Severity == DiagnosticSeverity.Error).ToList();
+            if (chainErrors.Count > 0)
+            {
+                throw new ChainValidationException(
+                    "编译失败：" + string.Join("；", chainErrors.Select(x => x.ToString())), chainDiagnostics, 1);
+            }
+
+            if (_options.Log != null)
+            {
+                foreach (var diagnostic in chainDiagnostics)
+                {
+                    _options.Log(diagnostic.ToString());
+                }
+            }
+
             IReadOnlyList<ChangeUnit> targets = units;
             if (!string.IsNullOrEmpty(changeId))
             {
@@ -139,8 +155,8 @@ namespace DbChronicle.Embedded
 
             if (errors.Count > 0)
             {
-                throw new InvalidOperationException(
-                    "编译失败：" + string.Join("；", errors.Select(x => x.ToString())));
+                throw new CompilationException(
+                    "编译失败：" + string.Join("；", errors.Select(x => x.ToString())), errors);
             }
 
             return builder.ToString();
@@ -168,7 +184,7 @@ namespace DbChronicle.Embedded
                 }
             }
 
-            diagnostics.AddRange(new ChangeChecker().Check(units));
+            diagnostics.AddRange(ChainValidator.Validate(units, _config));
             return diagnostics;
         }
 

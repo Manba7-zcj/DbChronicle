@@ -46,6 +46,7 @@ namespace DbChronicle.Configuration
             {
                 config.Database.Dialect = Attr(database, "dialect") ?? config.Database.Dialect;
                 config.Database.Version = Attr(database, "version") ?? config.Database.Version;
+                config.Database.CapabilityLevel = Attr(database, "capabilityLevel");
             }
 
             var environment = root.Element("environment");
@@ -60,6 +61,7 @@ namespace DbChronicle.Configuration
                 config.Paths.Migrations = Attr(paths, "migrations") ?? config.Paths.Migrations;
                 config.Paths.VersionLog = Attr(paths, "versionLog") ?? config.Paths.VersionLog;
                 config.Paths.Output = Attr(paths, "output") ?? config.Paths.Output;
+                config.Paths.Releases = Attr(paths, "releases") ?? config.Paths.Releases;
             }
 
             var baseline = root.Element("baseline");
@@ -81,6 +83,9 @@ namespace DbChronicle.Configuration
                 config.Options.IncrementalModify = BoolAttr(options, "incrementalModify", config.Options.IncrementalModify);
                 config.Options.CommitScope = Attr(options, "commitScope") ?? config.Options.CommitScope;
                 config.Options.CommitBatchSize = IntAttr(options, "commitBatchSize", config.Options.CommitBatchSize);
+                config.Options.StrictReferenceCheck = BoolAttr(options, "strictReferenceCheck", config.Options.StrictReferenceCheck);
+                config.Options.AllowLateSubmission = BoolAttr(options, "allowLateSubmission", config.Options.AllowLateSubmission);
+                config.Options.VersionDriftPolicy = Attr(options, "versionDriftPolicy") ?? config.Options.VersionDriftPolicy;
             }
 
             Normalize(config);
@@ -106,12 +111,14 @@ namespace DbChronicle.Configuration
                         new XAttribute("version", config.Component.Version ?? "1.0.0")),
                     new XElement("database",
                         new XAttribute("dialect", config.Database.Dialect ?? "mysql"),
-                        new XAttribute("version", config.Database.Version ?? "8.0")),
+                        new XAttribute("version", config.Database.Version ?? "8.0"),
+                        new XAttribute("capabilityLevel", config.Database.CapabilityLevel ?? "")),
                     new XElement("environment", config.Environment ?? "dev"),
                     new XElement("paths",
                         new XAttribute("migrations", config.Paths.Migrations ?? "./migrations"),
                         new XAttribute("versionLog", config.Paths.VersionLog ?? "./version_log/${environment}"),
-                        new XAttribute("output", config.Paths.Output ?? "./output")),
+                        new XAttribute("output", config.Paths.Output ?? "./output"),
+                        new XAttribute("releases", config.Paths.Releases ?? "./releases")),
                     new XElement("baseline",
                         new XAttribute("file", config.Baseline.File ?? ""),
                         new XAttribute("frozen", config.Baseline.Frozen ? "true" : "false"),
@@ -124,7 +131,10 @@ namespace DbChronicle.Configuration
                         new XAttribute("lockTimeoutSeconds", config.Options.LockTimeoutSeconds),
                         new XAttribute("incrementalModify", config.Options.IncrementalModify ? "true" : "false"),
                         new XAttribute("commitScope", config.Options.CommitScope ?? "unit"),
-                        new XAttribute("commitBatchSize", config.Options.CommitBatchSize))));
+                        new XAttribute("commitBatchSize", config.Options.CommitBatchSize),
+                        new XAttribute("strictReferenceCheck", config.Options.StrictReferenceCheck ? "true" : "false"),
+                        new XAttribute("allowLateSubmission", config.Options.AllowLateSubmission ? "true" : "false"),
+                        new XAttribute("versionDriftPolicy", config.Options.VersionDriftPolicy ?? "warn"))));
 
             var directory = Path.GetDirectoryName(Path.GetFullPath(configPath));
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))

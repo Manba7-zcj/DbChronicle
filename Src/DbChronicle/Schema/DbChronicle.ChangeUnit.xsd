@@ -47,6 +47,280 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="NonEmptyString">
+    <xs:annotation>
+      <xs:documentation>非空文本：至少要有一个非空白字符；纯空格、空串都算无效（元素内容允许换行与缩进）。用于必填名称、SQL 片段与视图查询。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[\s\S]*\S[\s\S]*" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Identifier">
+    <xs:annotation>
+      <xs:documentation>ASCII 标识符：字母开头，只含字母、数字与下划线。字符集、排序规则、存储引擎、表空间等取值都属于这类数据库关键字，不接受纯数字、中文、空格或连字符。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:NCName">
+      <xs:pattern value="[A-Za-z][A-Za-z0-9_]*" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="IncrementValue">
+    <xs:annotation>
+      <xs:documentation>序列步长：整数且不能为 0（INCREMENT BY 0 在 PostgreSQL / SQL Server 是非法 DDL）。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:long">
+      <xs:pattern value="[+-]?[0-9]*[1-9][0-9]*" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ColumnReference">
+    <xs:annotation>
+      <xs:documentation>列级外键引用：必须写成 表名.列名（恰好一个点号，两端非空，不能有空格），与解析阶段的 E031 一致。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[^.\s]+(\.[^.\s]+)" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="DialectName">
+    <xs:annotation>
+      <xs:documentation>方言名：只允许这六种，写错会导致该段 SQL 被当成缺当前方言而跳过（W032）。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="mysql">
+        <xs:annotation>
+          <xs:documentation>MySQL：按 database.version 选择 5.7 / 8.0 语法差异。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="mariadb">
+        <xs:annotation>
+          <xs:documentation>MariaDB：默认按 10.5 处理。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="postgresql">
+        <xs:annotation>
+          <xs:documentation>PostgreSQL：配置里的 pgsql 是它的别名，此处必须写 postgresql。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="sqlserver">
+        <xs:annotation>
+          <xs:documentation>SQL Server。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="sqlite">
+        <xs:annotation>
+          <xs:documentation>SQLite：结构受限，很多操作需要重建表。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="any">
+        <xs:annotation>
+          <xs:documentation>所有方言通用：当前方言缺专用片段时回退到它。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CommonCharset">
+    <xs:annotation>
+      <xs:documentation>常见字符集：给出候选便于补全；实际校验只要求是 ASCII 标识符，自定义字符集不会被误报。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="utf8mb4">
+        <xs:annotation>
+          <xs:documentation>四字节 UTF-8：支持 emoji 与生僻字，MySQL 8.0 默认，新项目首选。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8">
+        <xs:annotation>
+          <xs:documentation>MySQL 里是三字节 UTF-8 的历史别名（等同 utf8mb3），不支持四字节字符。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8mb3">
+        <xs:annotation>
+          <xs:documentation>三字节 UTF-8：不支持四字节字符，建议改用 utf8mb4。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gbk">
+        <xs:annotation>
+          <xs:documentation>简体中文双字节编码：兼容 GBK。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gb18030">
+        <xs:annotation>
+          <xs:documentation>简体中文四字节编码：GB18030 全集。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gb2312">
+        <xs:annotation>
+          <xs:documentation>简体中文基础字符集：只覆盖 GB2312。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="big5">
+        <xs:annotation>
+          <xs:documentation>繁体中文编码。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="latin1">
+        <xs:annotation>
+          <xs:documentation>西欧单字节编码：MySQL 的 latin1 实际是 cp1252。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="ascii">
+        <xs:annotation>
+          <xs:documentation>七位 ASCII：只能存 0-127。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="binary">
+        <xs:annotation>
+          <xs:documentation>二进制字符集：按字节比较，不做字符集转换。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CharsetName">
+    <xs:annotation>
+      <xs:documentation>字符集名：常见值可直接选，也接受其它 ASCII 标识符。</xs:documentation>
+    </xs:annotation>
+    <xs:union memberTypes="CommonCharset Identifier" />
+  </xs:simpleType>
+
+  <xs:simpleType name="CommonCollation">
+    <xs:annotation>
+      <xs:documentation>常见排序规则：给出候选便于补全；实际校验只要求是 ASCII 标识符，未列出的排序规则不会被误报。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="utf8mb4_general_ci">
+        <xs:annotation>
+          <xs:documentation>utf8mb4 通用排序规则：不区分大小写，MySQL 5.7 默认。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8mb4_unicode_ci">
+        <xs:annotation>
+          <xs:documentation>utf8mb4 Unicode 排序规则：按 Unicode 规则排序，不区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8mb4_0900_ai_ci">
+        <xs:annotation>
+          <xs:documentation>utf8mb4 的 UCA 9.0.0 排序规则：不区分重音与大小写，MySQL 8.0 默认。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8mb4_0900_as_cs">
+        <xs:annotation>
+          <xs:documentation>utf8mb4 的 UCA 9.0.0 排序规则：区分重音与大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8mb4_bin">
+        <xs:annotation>
+          <xs:documentation>utf8mb4 二进制比较：按字节比较，区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8_general_ci">
+        <xs:annotation>
+          <xs:documentation>utf8（三字节）通用排序规则：不区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8_unicode_ci">
+        <xs:annotation>
+          <xs:documentation>utf8（三字节）Unicode 排序规则：不区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="utf8_bin">
+        <xs:annotation>
+          <xs:documentation>utf8（三字节）二进制比较：区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gbk_chinese_ci">
+        <xs:annotation>
+          <xs:documentation>GBK 中文排序规则：不区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="gb18030_chinese_ci">
+        <xs:annotation>
+          <xs:documentation>GB18030 中文排序规则：不区分大小写。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="latin1_swedish_ci">
+        <xs:annotation>
+          <xs:documentation>latin1 瑞典语排序规则：MySQL 5.7 默认。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="binary">
+        <xs:annotation>
+          <xs:documentation>二进制排序规则：与 BINARY 字符集配对，按字节比较。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CollationName">
+    <xs:annotation>
+      <xs:documentation>排序规则名：常见值可直接选，也接受其它 ASCII 标识符（写成数字、中文或空格会报错）。</xs:documentation>
+    </xs:annotation>
+    <xs:union memberTypes="CommonCollation Identifier" />
+  </xs:simpleType>
+
+  <xs:simpleType name="StorageEngine">
+    <xs:annotation>
+      <xs:documentation>MySQL / MariaDB 存储引擎：给出候选便于补全；实际校验只要求是 ASCII 标识符，插件式引擎不会被误报。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="InnoDB">
+        <xs:annotation>
+          <xs:documentation>事务型引擎：支持外键、行锁与崩溃恢复，MySQL 5.5 起默认。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="MyISAM">
+        <xs:annotation>
+          <xs:documentation>非事务引擎：表级锁，不支持外键与事务。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="MEMORY">
+        <xs:annotation>
+          <xs:documentation>内存引擎：数据在内存中，重启即丢失。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="ARCHIVE">
+        <xs:annotation>
+          <xs:documentation>归档引擎：只写压缩存储，不支持索引与更新。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="CSV">
+        <xs:annotation>
+          <xs:documentation>CSV 引擎：以文本文件存储，不支持索引与事务。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="BLACKHOLE">
+        <xs:annotation>
+          <xs:documentation>黑洞引擎：写入即丢弃，常用于复制中继。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="MRG_MyISAM">
+        <xs:annotation>
+          <xs:documentation>MERGE 引擎：把多个结构相同的 MyISAM 表合成一个逻辑表。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="FEDERATED">
+        <xs:annotation>
+          <xs:documentation>联邦引擎：代理访问远端 MySQL 表。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="NDB">
+        <xs:annotation>
+          <xs:documentation>NDB 引擎：MySQL Cluster 使用。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="EngineName">
+    <xs:annotation>
+      <xs:documentation>存储引擎名：常见值可直接选，也接受其它 ASCII 标识符。</xs:documentation>
+    </xs:annotation>
+    <xs:union memberTypes="StorageEngine Identifier" />
+  </xs:simpleType>
+
   <xs:simpleType name="LogicalType">
     <xs:annotation>
       <xs:documentation>逻辑类型（区分大小写）。禁止写物理类型（VARCHAR / TINYINT 等）。String / FixedString / Binary 必须同时给 length。</xs:documentation>
@@ -419,15 +693,19 @@
     </xs:restriction>
   </xs:simpleType>
 
-  <xs:complexType name="DialectSqlType" mixed="true">
+  <xs:complexType name="DialectSqlType">
     <xs:annotation>
-      <xs:documentation>按方言的 SQL 片段：dialect 取 mysql / mariadb / postgresql / sqlserver / sqlite，any 或缺省表示所有方言通用。</xs:documentation>
+      <xs:documentation>按方言的 SQL 片段：dialect 取 mysql / mariadb / postgresql / sqlserver / sqlite，any 或缺省表示所有方言通用。sql 文本不能为空（纯空白也算空），长脚本建议用 CDATA。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="dialect" type="xs:string">
-      <xs:annotation>
-        <xs:documentation>方言名（mysql / mariadb / postgresql / sqlserver / sqlite / any）。缺省为 any。</xs:documentation>
-      </xs:annotation>
-    </xs:attribute>
+    <xs:simpleContent>
+      <xs:extension base="NonEmptyString">
+        <xs:attribute name="dialect" type="DialectName">
+          <xs:annotation>
+            <xs:documentation>方言名（mysql / mariadb / postgresql / sqlserver / sqlite / any）。缺省为 any。</xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+      </xs:extension>
+    </xs:simpleContent>
   </xs:complexType>
 
   <xs:complexType name="DependsType">
@@ -445,7 +723,7 @@
     <xs:annotation>
       <xs:documentation>列引用：用于索引 / 主键 / 唯一约束 / 外键的列清单。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>列名。</xs:documentation>
       </xs:annotation>
@@ -456,7 +734,7 @@
     <xs:annotation>
       <xs:documentation>列定义 / 列操作。CREATE 表内必须给 type（String / FixedString / Binary 还要 length）；ALTER 表内 action 缺省 ADD。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>列名。</xs:documentation>
       </xs:annotation>
@@ -471,19 +749,19 @@
         <xs:documentation>逻辑类型（不是物理类型）。ADD 必填；MODIFY 在 full 模式下必填。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="length" type="xs:int">
+    <xs:attribute name="length" type="xs:positiveInteger">
       <xs:annotation>
-        <xs:documentation>长度：String / FixedString / Binary 必填；Blob 写了会被忽略并告警 W005。</xs:documentation>
+        <xs:documentation>长度：正整数。String / FixedString / Binary 必填；Blob 写了会被忽略并告警 W005。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="precision" type="xs:int">
+    <xs:attribute name="precision" type="xs:positiveInteger">
       <xs:annotation>
-        <xs:documentation>精度：Decimal 使用。</xs:documentation>
+        <xs:documentation>精度：正整数，Decimal 使用。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="scale" type="xs:int">
+    <xs:attribute name="scale" type="xs:nonNegativeInteger">
       <xs:annotation>
-        <xs:documentation>小数位：Decimal 使用。</xs:documentation>
+        <xs:documentation>小数位：非负整数，Decimal 使用，不能大于 precision。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
     <xs:attribute name="nullable" type="BooleanLiteral">
@@ -513,7 +791,7 @@
     </xs:attribute>
     <xs:attribute name="defaultValue" type="xs:string">
       <xs:annotation>
-        <xs:documentation>默认值：null = 显式 NULL；'' = 空字符串；none = 删除默认值；CURRENT_TIMESTAMP 等函数形态原样透传。省略的含义由 incrementalModify 决定（true 保持原值 / false 目标无默认值）。</xs:documentation>
+        <xs:documentation>默认值：null = 显式 NULL；'' = 空字符串；none = 删除默认值；CURRENT_TIMESTAMP 等函数形态原样透传。省略的含义由 incrementalModify 决定（true 保持原值 / false 目标无默认值）。字面量须与 type 匹配：数值列只能写数字，Boolean 只能写 true / false，否则解析报 E060（XSD 1.0 无法表达这种跨属性约束，由 check / compile 阶段校验）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
     <xs:attribute name="comment" type="xs:string">
@@ -521,32 +799,32 @@
         <xs:documentation>列注释；COMMENT 动作必填。PostgreSQL / SQL Server 支持；MySQL 需要完整列定义，否则跳过并告警 W007；SQLite 不支持，跳过并告警 W007。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="onUpdate" type="xs:string">
+    <xs:attribute name="onUpdate" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>更新时刷新值（如 CURRENT_TIMESTAMP），仅 DateTime / DateTimeOffset 有效，仅 MySQL/MariaDB 生效。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="charset" type="xs:string">
+    <xs:attribute name="charset" type="CharsetName">
       <xs:annotation>
-        <xs:documentation>列字符集（MySQL/MariaDB）。</xs:documentation>
+        <xs:documentation>列字符集（MySQL/MariaDB）：常见字符集可直接选，也接受其它 ASCII 标识符。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="collate" type="xs:string">
+    <xs:attribute name="collate" type="CollationName">
       <xs:annotation>
-        <xs:documentation>列排序规则（MySQL/MariaDB）。</xs:documentation>
+        <xs:documentation>列排序规则（MySQL/MariaDB）：常见排序规则可直接选，也接受其它 ASCII 标识符；数字、中文、空格会报错。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="foreignKey" type="xs:string">
+    <xs:attribute name="foreignKey" type="ColumnReference">
       <xs:annotation>
         <xs:documentation>列级外键引用，格式必须是 表名.列名（例如 nor_dept.id）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="renamedFrom" type="xs:string">
+    <xs:attribute name="renamedFrom" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>重命名前的列名，action=RENAME 时必填。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="after" type="xs:string">
+    <xs:attribute name="after" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>列顺序位置（列名或 FIRST），action=REORDER 时使用；不支持 before，仅 MySQL/MariaDB 生效。</xs:documentation>
       </xs:annotation>
@@ -565,7 +843,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="columnRef" type="ColumnRefType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>索引名。</xs:documentation>
       </xs:annotation>
@@ -575,7 +853,7 @@
         <xs:documentation>索引动作，缺省 ADD。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="newName" type="xs:string">
+    <xs:attribute name="newName" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>重命名后的索引名，action=RENAME 时必填。</xs:documentation>
       </xs:annotation>
@@ -590,12 +868,12 @@
         <xs:documentation>索引类型：NORMAL / UNIQUE / FULLTEXT / SPATIAL。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="columns" type="xs:string">
+    <xs:attribute name="columns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>列清单，逗号分隔（也可用 columnRef 子节点）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="expression" type="xs:string">
+    <xs:attribute name="expression" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>表达式索引（方言支持时使用）。</xs:documentation>
       </xs:annotation>
@@ -619,7 +897,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="columnRef" type="ColumnRefType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>主键约束名（可选）。</xs:documentation>
       </xs:annotation>
@@ -629,7 +907,7 @@
         <xs:documentation>动作，缺省 ADD。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="columns" type="xs:string">
+    <xs:attribute name="columns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>主键列清单，逗号分隔。</xs:documentation>
       </xs:annotation>
@@ -643,7 +921,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="columnRef" type="ColumnRefType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>约束名。</xs:documentation>
       </xs:annotation>
@@ -653,7 +931,7 @@
         <xs:documentation>动作，缺省 ADD。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="columns" type="xs:string">
+    <xs:attribute name="columns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>列清单，逗号分隔。</xs:documentation>
       </xs:annotation>
@@ -664,7 +942,7 @@
     <xs:annotation>
       <xs:documentation>检查约束。ADD 时 expression 必填；SQLite 会走表重建。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>约束名。</xs:documentation>
       </xs:annotation>
@@ -674,7 +952,7 @@
         <xs:documentation>动作，缺省 ADD。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="expression" type="xs:string">
+    <xs:attribute name="expression" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>检查表达式，例如 age &gt;= 0 AND age &lt;= 150（XML 中 &lt; &gt; &amp; 需转义或写进 CDATA）。</xs:documentation>
       </xs:annotation>
@@ -685,7 +963,7 @@
     <xs:annotation>
       <xs:documentation>独立默认值约束（SET DEFAULT）：MySQL 8+ / MariaDB / PostgreSQL / SQL Server 支持；MySQL 5.7 告警 W024 并跳过，SQLite 跳过并告警 W025。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>约束名。</xs:documentation>
       </xs:annotation>
@@ -695,12 +973,12 @@
         <xs:documentation>动作，缺省 ADD。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="column" type="xs:string">
+    <xs:attribute name="column" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>目标列名。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="value" type="xs:string">
+    <xs:attribute name="value" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>默认值表达式，原样写入 DDL。</xs:documentation>
       </xs:annotation>
@@ -714,7 +992,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="columnRef" type="ColumnRefType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>外键名。</xs:documentation>
       </xs:annotation>
@@ -724,17 +1002,17 @@
         <xs:documentation>动作，缺省 ADD；DROP 时只写 name。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="columns" type="xs:string">
+    <xs:attribute name="columns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>本表列清单，逗号分隔。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="refTable" type="xs:string">
+    <xs:attribute name="refTable" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>引用表名（ADD 时必填）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="refColumns" type="xs:string">
+    <xs:attribute name="refColumns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>引用列清单，逗号分隔。</xs:documentation>
       </xs:annotation>
@@ -755,7 +1033,7 @@
     <xs:annotation>
       <xs:documentation>约束注释（PostgreSQL / SQL Server 使用）。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>约束名（必填）。</xs:documentation>
       </xs:annotation>
@@ -779,7 +1057,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="sql" type="DialectSqlType" />
     </xs:choice>
-    <xs:attribute name="dialect" type="xs:string">
+    <xs:attribute name="dialect" type="DialectName">
       <xs:annotation>
         <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
       </xs:annotation>
@@ -795,7 +1073,7 @@
     <xs:annotation>
       <xs:documentation>种子数据行。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="values" type="xs:string" use="required">
+    <xs:attribute name="values" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>值列表，与 seed 的 columns 一一对应；字符串用单引号，逗号分隔（引号内的逗号不会被拆分）。</xs:documentation>
       </xs:annotation>
@@ -809,12 +1087,12 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="row" type="SeedRowType" />
     </xs:choice>
-    <xs:attribute name="columns" type="xs:string" use="required">
+    <xs:attribute name="columns" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>列清单，逗号分隔（必填）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="table" type="xs:string">
+    <xs:attribute name="table" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>兼容属性：解析器忽略，实际归属由外层 &lt;table name="..."&gt; 决定。</xs:documentation>
       </xs:annotation>
@@ -835,7 +1113,7 @@
     <xs:annotation>
       <xs:documentation>按条件更新数据（UPDATE）。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="set" type="xs:string" use="required">
+    <xs:attribute name="set" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>SET 子句，例如 status = 0（必填）。</xs:documentation>
       </xs:annotation>
@@ -872,7 +1150,7 @@
     <xs:annotation>
       <xs:documentation>数据清洗：按规则把列置空 / 置默认值。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="rules" type="xs:string" use="required">
+    <xs:attribute name="rules" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>清洗规则，形如 email = NULL; phone = NULL（必填）。</xs:documentation>
       </xs:annotation>
@@ -893,12 +1171,12 @@
     <xs:annotation>
       <xs:documentation>回填单列：column 与 value 必填。给本次新增列回填要用 stage="after"。</xs:documentation>
     </xs:annotation>
-    <xs:attribute name="column" type="xs:string" use="required">
+    <xs:attribute name="column" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>目标列名（必填）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="value" type="xs:string" use="required">
+    <xs:attribute name="value" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>回填值原样写入 SQL（必填），例如 0 或 'unknown'。</xs:documentation>
       </xs:annotation>
@@ -935,7 +1213,7 @@
       <xs:element name="clean" type="CleanType" />
       <xs:element name="backfill" type="BackfillType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>表名（必填）；"*" 表示库中所有业务表。</xs:documentation>
       </xs:annotation>
@@ -950,39 +1228,34 @@
         <xs:documentation>表注释；action=COMMENT 时使用。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="newName" type="xs:string">
+    <xs:attribute name="newName" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>新的表名，action=RENAME 时必填。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="tables" type="xs:string">
+    <xs:attribute name="tables" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>显式表清单，逗号分隔；仅在 name="*" 时有意义（离线也能展开）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="rebuild" type="BooleanLiteral">
+    <xs:attribute name="engine" type="EngineName">
       <xs:annotation>
-        <xs:documentation>已废弃：解析器忽略此属性，请改用 action="REBUILD"。</xs:documentation>
+        <xs:documentation>表引擎（仅 MySQL/MariaDB；action=ENGINE 或与 ENGINE/CHARSET 同用）：常见引擎可直接选，也接受其它 ASCII 标识符。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="engine" type="xs:string">
-      <xs:annotation>
-        <xs:documentation>表引擎（仅 MySQL/MariaDB；action=ENGINE 或与 ENGINE/CHARSET 同用）。</xs:documentation>
-      </xs:annotation>
-    </xs:attribute>
-    <xs:attribute name="charset" type="xs:string">
+    <xs:attribute name="charset" type="CharsetName">
       <xs:annotation>
         <xs:documentation>表字符集（仅 MySQL/MariaDB；action=CHARSET）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="collate" type="xs:string">
+    <xs:attribute name="collate" type="CollationName">
       <xs:annotation>
-        <xs:documentation>表排序规则（仅 MySQL/MariaDB）。</xs:documentation>
+        <xs:documentation>表排序规则（仅 MySQL/MariaDB）：数字、中文、空格会报错。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="tablespace" type="xs:string">
+    <xs:attribute name="tablespace" type="Identifier">
       <xs:annotation>
-        <xs:documentation>表空间（PostgreSQL / Oracle 类方言；action=TABLESPACE）。</xs:documentation>
+        <xs:documentation>表空间（PostgreSQL / Oracle 类方言；action=TABLESPACE）：ASCII 标识符。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
   </xs:complexType>
@@ -994,7 +1267,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="sql" type="DialectSqlType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>归属表名（可选），仅用于分组与日志，不影响执行。</xs:documentation>
       </xs:annotation>
@@ -1011,14 +1284,14 @@
       <xs:documentation>视图：提供 &lt;select&gt; 时按方言结构化生成；只给 &lt;sql dialect&gt; 或 dialect 属性 + 节点内文本时原样透传；action=DROP 可只写 name。</xs:documentation>
     </xs:annotation>
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="select" type="xs:string">
+      <xs:element name="select" type="NonEmptyString">
         <xs:annotation>
-          <xs:documentation>视图查询语句（不含 CREATE VIEW 前缀），例如 SELECT id, name FROM nor_user。</xs:documentation>
+          <xs:documentation>视图查询语句（不含 CREATE VIEW 前缀），例如 SELECT id, name FROM nor_user；不能为空（纯空白也算空）。</xs:documentation>
         </xs:annotation>
       </xs:element>
       <xs:element name="sql" type="DialectSqlType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>视图名（必填）。</xs:documentation>
       </xs:annotation>
@@ -1028,17 +1301,17 @@
         <xs:documentation>动作，缺省 ADD（各生成 CREATE OR REPLACE / CREATE OR ALTER）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="select" type="xs:string">
+    <xs:attribute name="select" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>兼容写法：也可用 select 属性代替 &lt;select&gt; 子节点。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="dialect" type="xs:string">
+    <xs:attribute name="dialect" type="DialectName">
       <xs:annotation>
         <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;select&gt; 或 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="columns" type="xs:string">
+    <xs:attribute name="columns" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>视图列名清单，逗号分隔（可选）。</xs:documentation>
       </xs:annotation>
@@ -1057,7 +1330,7 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="sql" type="DialectSqlType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="required">
+    <xs:attribute name="name" type="NonEmptyString" use="required">
       <xs:annotation>
         <xs:documentation>序列名（必填）。</xs:documentation>
       </xs:annotation>
@@ -1072,9 +1345,9 @@
         <xs:documentation>起始值 START WITH。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="increment" type="xs:long">
+    <xs:attribute name="increment" type="IncrementValue">
       <xs:annotation>
-        <xs:documentation>步长 INCREMENT BY。</xs:documentation>
+        <xs:documentation>步长 INCREMENT BY：整数且不能为 0。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
     <xs:attribute name="minValue" type="xs:long">
@@ -1092,9 +1365,9 @@
         <xs:documentation>是否循环 CYCLE。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="cache" type="xs:long">
+    <xs:attribute name="cache" type="xs:positiveInteger">
       <xs:annotation>
-        <xs:documentation>缓存个数 CACHE。</xs:documentation>
+        <xs:documentation>缓存个数 CACHE：正整数。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
   </xs:complexType>
@@ -1106,12 +1379,12 @@
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="sql" type="DialectSqlType" />
     </xs:choice>
-    <xs:attribute name="name" type="xs:string">
+    <xs:attribute name="name" type="NonEmptyString">
       <xs:annotation>
         <xs:documentation>对象名（用于日志与排序，可选）。</xs:documentation>
       </xs:annotation>
     </xs:attribute>
-    <xs:attribute name="dialect" type="xs:string">
+    <xs:attribute name="dialect" type="DialectName">
       <xs:annotation>
         <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
       </xs:annotation>
@@ -1148,7 +1421,7 @@
           <xs:documentation>变更单元 id（必填）：8 位日期开头，必须与文件名前缀一致。</xs:documentation>
         </xs:annotation>
       </xs:attribute>
-      <xs:attribute name="author" type="xs:string" use="required">
+      <xs:attribute name="author" type="NonEmptyString" use="required">
         <xs:annotation>
           <xs:documentation>变更作者（必填）。</xs:documentation>
         </xs:annotation>
@@ -1156,6 +1429,11 @@
       <xs:attribute name="release" type="Release" use="required">
         <xs:annotation>
           <xs:documentation>所属发布版本（必填）：yyyyMMdd；基线固定 00000000；不得晚于当前日期 + 1 天。</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="lateSubmission" type="BooleanLiteral">
+        <xs:annotation>
+          <xs:documentation>补丁标记：true 表示本单元是发布窗口之后补提交的补丁，只告警 W046；不写且配置未开启 allowLateSubmission 时报 E121。</xs:documentation>
         </xs:annotation>
       </xs:attribute>
     </xs:complexType>
