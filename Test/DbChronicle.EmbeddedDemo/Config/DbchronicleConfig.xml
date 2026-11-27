@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dbchronicle>
+  <component name="DbChronicle" version="1.0.0" />
+  <database dialect="sqlite" version="3.35" />
+  <environment>demo</environment>
+  <paths migrations="./migrations" versionLog="./version_log/${environment}" output="./output" />
+  <baseline file="" frozen="false" frozenAt="" />
+  <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
+           statementDelimiter=";"
+           lockTimeoutSeconds="10" incrementalModify="true"
+           commitScope="unit" commitBatchSize="10" />
+</dbchronicle>

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>DbChronicle.EmbeddedDemo</AssemblyName>
+    <RootNamespace>DbChronicle.EmbeddedDemo</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="DbChronicle">
+      <HintPath>..\..\Src\DbChronicle\bin\$(Configuration)\netstandard2.0\DbChronicle.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="DbChronicle.Executor.AdoNet">
+      <HintPath>..\..\Src\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\DbChronicle.Executor.AdoNet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DbChronicle\DbChronicle.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Src\DbChronicle.Executor.AdoNet\DbChronicle.Executor.AdoNet.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <PackageReference Include="Npgsql" Version="6.0.9" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Migrations\**\*.xml">
+      <Link>migrations\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Config\DbchronicleConfig.xml">
+      <Link>DbchronicleConfig.xml</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

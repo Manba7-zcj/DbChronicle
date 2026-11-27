@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System;
@@ -16,6 +18,9 @@ namespace DbChronicle.Embedded
 {
     internal sealed class DefaultDbChronicle : IDbChronicle
     {
+        private static readonly ConcurrentDictionary<string, object> UpgradeGates =
+            new ConcurrentDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
         private readonly IDbExecutor _executor;
         private readonly DbChronicleOptions _options;
         private readonly DbChronicleConfig _config;
@@ -24,7 +29,11 @@ namespace DbChronicle.Embedded
         {
             _executor = executor;
             _options = options;
-            _config = options.Config ?? ConfigLoader.Load(options.ConfigPath);
+            _config = options.Config ?? ConfigLoader.Load(ResolveConfigPath(options.ConfigPath));
+            if (_config.BaseDirectory == null)
+            {
+                _config.BaseDirectory = AppContext.BaseDirectory;
+            }
         }
 
         public DbChronicleConfig Config
@@ -39,9 +48,23 @@ namespace DbChronicle.Embedded
 
         public DbUpgradeResult DbUpgrade(DbUpgradeOptions options)
         {
-            var units = LoadUnits();
             var upgradeOptions = options ?? new DbUpgradeOptions();
+            var gate = UpgradeGates.GetOrAdd(_config.ResolveVersionLogPath(), _ => new object());
+            lock (gate)
+            {
+                return DbUpgradeCore(upgradeOptions);
+            }
+        }
 
+        private DbUpgradeResult DbUpgradeCore(DbUpgradeOptions upgradeOptions)
+        {
+            if (!upgradeOptions.DryRun && _options.Log != null
+                && (string.IsNullOrEmpty(upgradeOptions.ConnectionString) || upgradeOptions.LockFactory == null))
+            {
+                _options.Log("警告：未同时提供 ConnectionString 与 LockFactory，跨进程互斥未启用；多实例部署请务必提供两者");
+            }
+
+            var units = LoadUnits();
             var executor = new SchemaExecutor(_config, null, upgradeOptions.LockFactory);
             var applied = executor.ApplyWith(_executor, units, new ApplyOptions
             {
@@ -76,9 +99,22 @@ namespace DbChronicle.Embedded
         public string Compile(string changeId = null)
         {
             var units = LoadUnits();
-            var targets = string.IsNullOrEmpty(changeId)
-                ? units
-                : units.Where(x => string.Equals(x.Id, changeId, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (units.Count == 0)
+            {
+                throw new InvalidOperationException("未找到变更单元：" + _config.ResolveMigrationsPath());
+            }
+
+            IReadOnlyList<ChangeUnit> targets = units;
+            if (!string.IsNullOrEmpty(changeId))
+            {
+                targets = units
+                    .Where(x => string.Equals(x.Id, changeId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (targets.Count == 0)
+                {
+                    throw new InvalidOperationException("未找到变更单元：" + changeId);
+                }
+            }
 
             var builder = new StringBuilder();
             var errors = new List<CompileDiagnostic>();
@@ -91,6 +127,12 @@ namespace DbChronicle.Embedded
                     if (diagnostic.Severity == DiagnosticSeverity.Error)
                     {
                         errors.Add(diagnostic);
+                        continue;
+                    }
+
+                    if (_options.Log != null)
+                    {
+                        _options.Log(diagnostic.ToString());
                     }
                 }
             }
@@ -106,7 +148,28 @@ namespace DbChronicle.Embedded
 
         public IReadOnlyList<CompileDiagnostic> Check()
         {
-            return new ChangeChecker().Check(LoadUnits());
+            var units = LoadUnits();
+            var diagnostics = new List<CompileDiagnostic>();
+            foreach (var unit in units)
+            {
+                try
+                {
+                    diagnostics.AddRange(DbChronicleMigrator.CompileUnit(_config, units, unit).Diagnostics);
+                }
+                catch (Exception ex)
+                {
+                    diagnostics.Add(new CompileDiagnostic
+                    {
+                        Code = "E043",
+                        Severity = DiagnosticSeverity.Error,
+                        ChangeId = unit.Id,
+                        Message = "编译异常：" + ex.Message
+                    });
+                }
+            }
+
+            diagnostics.AddRange(new ChangeChecker().Check(units));
+            return diagnostics;
         }
 
         public IReadOnlyList<AppliedChange> Status()
@@ -114,9 +177,32 @@ namespace DbChronicle.Embedded
             return new VersionStore(_config).LoadAll();
         }
 
+        public IReadOnlyList<ChangeUnit> PendingUnits()
+        {
+            var applied = new HashSet<string>(
+                new VersionStore(_config).LoadAll()
+                    .Where(x => !x.HasFailure)
+                    .Select(x => x.ChangeId),
+                StringComparer.OrdinalIgnoreCase);
+
+            return LoadUnits().Where(x => !applied.Contains(x.Id)).ToList();
+        }
+
         public void Dispose()
         {
             // 执行器由宿主创建与释放，这里不接管其生命周期
-}
-}
+        }
+
+        private static string ResolveConfigPath(string configPath)
+        {
+            if (string.IsNullOrEmpty(configPath))
+            {
+                return configPath;
+            }
+
+            return Path.IsPathRooted(configPath)
+                ? configPath
+                : Path.Combine(AppContext.BaseDirectory, configPath);
+        }
+    }
 }

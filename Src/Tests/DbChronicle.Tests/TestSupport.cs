@@ -20,7 +20,6 @@ namespace DbChronicle.Tests
             config.Database.Dialect = "mysql";
             config.Database.Version = "8.0";
             config.Options.IncrementalModify = incrementalModify;
-            config.Options.AllowDestructive = true;
             return config;
         }
 

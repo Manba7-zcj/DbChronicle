@@ -47,12 +47,20 @@ namespace DbChronicle.Migrations.Executor
 
             var result = new ApplyResult();
             var ordered = ChangeUnitLoader.Sort(units);
+            if (ordered.Count == 0)
+            {
+                result.Message = "未找到变更单元：" + _config.ResolveMigrationsPath();
+                result.ExitCode = 1;
+                return result;
+            }
+
             var dialectContext = new DialectContext { IncrementalModify = _config.Options.IncrementalModify };
             var dialect = DialectFactory.Create(_config.Database.Dialect, _config.Database.Version, dialectContext);
             var compilerOptions = new CompilerOptions
             {
                 IncrementalModify = _config.Options.IncrementalModify,
-                IncludeComments = _config.Options.IncludeComments
+                IncludeComments = _config.Options.IncludeComments,
+                StatementDelimiter = _config.Options.StatementDelimiter
             };
 
             {
@@ -96,6 +104,13 @@ namespace DbChronicle.Migrations.Executor
                     {
                         store.EnsureTable();
                         applied = store.LoadAll();
+                    }
+
+                    if (!string.IsNullOrEmpty(options.MarkAppliedChangeId) && options.DryRun)
+                    {
+                        result.Message = "dry-run 与 mark-applied 不能同时使用：标记已应用会写状态文件";
+                        result.ExitCode = 1;
+                        return result;
                     }
 
                     if (!string.IsNullOrEmpty(options.MarkAppliedChangeId))
@@ -248,7 +263,8 @@ namespace DbChronicle.Migrations.Executor
             var compilerOptions = new CompilerOptions
             {
                 IncrementalModify = _config.Options.IncrementalModify,
-                IncludeComments = _config.Options.IncludeComments
+                IncludeComments = _config.Options.IncludeComments,
+                StatementDelimiter = _config.Options.StatementDelimiter
             };
 
             using (var executor = _executorFactory.Create(options.ConnectionString))

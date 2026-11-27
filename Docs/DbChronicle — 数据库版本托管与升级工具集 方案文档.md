@@ -380,7 +380,6 @@ CLI 启动或核心库初始化时加载，决定方言、版本、路径、基�
            includeComments="true"
            includeRollback="true"
            statementDelimiter=";"
-           allowDestructive="false"
            lockTimeoutSeconds="10"
            incrementalModify="true"
            commitScope="unit"
@@ -580,7 +579,7 @@ executor.ApplyPending(units, connectionString);
 | 1.7 | 修改表空间   | `TABLESPACE` | `name`、`tablespace`         | 极高     | 否     |
 | 1.8 | 重建表       | `REBUILD`    | `name`、完整列定义           | 中       | **是** |
 
-**1.5 ~ 1.7 已结构化实现**：MySQL / MariaDB 生成 `ALTER TABLE … ENGINE=…` / `DEFAULT CHARSET=… COLLATE=…`，PostgreSQL 支持 `SET TABLESPACE`；能力之外的组合报 **E047**（SQL Server / SQLite 全部不支持，PG 不支持 ENGINE / CHARSET）。`PARTITION` / `GRANT` / `SYNONYM` 仍走 `<rawSql>`（报 E012）。`REBUILD` 仅做破坏性校验并告警 W018（SQLite 自动 rebuild，其他方言请用 `<rawSql>`）。
+**1.5 ~ 1.7 已结构化实现**：MySQL / MariaDB 生成 `ALTER TABLE … ENGINE=…` / `DEFAULT CHARSET=… COLLATE=…`，PostgreSQL 支持 `SET TABLESPACE`；能力之外的组合报 **E047**（SQL Server / SQLite 全部不支持，PG 不支持 ENGINE / CHARSET）。`PARTITION` / `GRANT` / `SYNONYM` 仍走 `<rawSql>`（报 E012）。`REBUILD` 按 `ALTER` 处理并告警 W018（SQLite 自动 rebuild，其他方言请用 `<rawSql>`）。
 
 ```xml
 <table name="nor_user" action="ENGINE" engine="InnoDB" charset="utf8mb4" collate="utf8mb4_general_ci"/>
@@ -749,7 +748,7 @@ executor.ApplyPending(units, connectionString);
 | 节点       | 必填               | 生成 SQL                               | 约束                                    |
 | ---------- | ------------------ | -------------------------------------- | --------------------------------------- |
 | `update`   | `set`              | `UPDATE t SET {set} [WHERE {where}]`   | `set` 缺失报 E022                       |
-| `delete`   | —                  | `DELETE FROM t [WHERE {where}]`        | 需 `allowDestructive: true`             |
+| `delete`   | —                  | `DELETE FROM t [WHERE {where}]`        | 直接执行；省略 `where` 会删除全表       |
 | `clean`    | `rules`            | `UPDATE t SET {rules} [WHERE {where}]` | `;` 分隔多条赋值，转成逗号；缺失报 E023 |
 | `backfill` | `column` + `value` | `UPDATE t SET c = {value} [WHERE ...]` | 缺失报 E024                             |
 
@@ -801,7 +800,7 @@ ChangeUnit 内的操作排序键依次是：**表（首次出现序）→ 操作
 ⑥ DROP_DEFAULT_CONSTRAINT 删默认值约束
 ⑦ DROP_PRIMARY_KEY        删主键
 ⑧ DROP_COLUMN             删列
-⑨ DROP_TABLE              删表（最晚，且需 allowDestructive）
+⑨ DROP_TABLE              删表（最晚）
 ```
 
 **③ 建表与结构变更（建表最先；其后才是改名 / 改列 / 加列 / 加约束）**
@@ -1043,7 +1042,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 #### 4.5.4 表节点：`<table>`
 
 ```xml
-<table name="nor_user" action="ALTER" rebuild="false" comment="用户表">
+<table name="nor_user" action="ALTER" comment="用户表">
   <column .../>
   <index .../>
   <foreignKey .../>
@@ -1062,7 +1061,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | --------- | -------------------------------------------------------------- | ------------------------------------------------ |
 | `name`    | 表名                                                           | 必填                                             |
 | `action`  | `CREATE` / `ALTER` / `DROP` / `RENAME` / `COMMENT` / `REBUILD` | 表级操作                                         |
-| `rebuild` | `true` / `false`                                               | 是否走重建策略                                   |
+| `rebuild` | 已废弃                                                         | 解析器忽略；请改用 `action="REBUILD"`            |
 | `comment` | 表注释                                                         | 可选                                             |
 | `newName` | 新表名                                                         | 仅 `RENAME` 时必填                               |
 | `tables`  | 逗号分隔的表名清单                                             | 仅 `name="*"` 时有意义；没有累积模型时的显式清单 |
@@ -1125,7 +1124,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | --------- | ------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `ADD`     | 新增列                                            | `type` + 长度/精度                               | SQLite 不允许带 `primaryKey` / `unique`，需走 rebuild                               |
 | `MODIFY`  | 改列；**语义由 `options.incrementalModify` 决定** | full：`type` + `nullable`；incremental：至少一项 | MySQL 一条 `MODIFY COLUMN`；PG 拆多条；SQL Server 先删默认值约束；SQLite 走 rebuild |
-| `DROP`    | 删列                                              | —                                                | SQLite 3.35.0+ 原生，更低版本 rebuild；需 `allowDestructive`                        |
+| `DROP`    | 删列                                              | —                                                | SQLite 3.35.0+ 原生，更低版本 rebuild                                               |
 | `RENAME`  | 改列名                                            | `renamedFrom`                                    | MySQL 5.7 需 `CHANGE` 并重述类型；SQL Server 用 `sp_rename`；SQLite 3.25.0+ 原生    |
 | `COMMENT` | 只改注释，不动类型/可空/默认值                    | `comment`                                        | PG 独立 `COMMENT ON`；SQL Server / SQLite 跳过并警告（W007）                        |
 | `REORDER` | 调整列顺序                                        | `after`（列名或 `FIRST`）                        | 仅 MySQL / MariaDB 生效；PG / SQL Server / SQLite **报错 E044**（不静默忽略）       |
@@ -1406,7 +1405,6 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 | `foreignKey` 格式必须为 `表名.列名`                                      | 解析失败                                     |
 | 同一 `changeUnit` 内，同一表同一列不得重复出现                           | 解析失败                                     |
 | `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言  | 编译时跳过 + 警告（W032）                    |
-| `DROP_TABLE` / `DROP_COLUMN` 必须有显式 `allowDestructive` 配置          | 解析失败                                     |
 | `unsigned=true` 仅对整数类型有效                                         | 解析失败                                     |
 | `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                                     |
 | 数据操作节点的 `stage` 仅允许 `before` / `after`                         | 解析失败                                     |
@@ -1611,7 +1609,6 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 | `<view>` 既无 `<select>` 也无本方言 `<sql>`                   | 全方言                           | E048       | 补 `<select>`（结构化）或补 `<sql dialect>`                 |
 | `<sequence>` 缺 `name`                                        | 全方言                           | E049       | 补 `name`                                                   |
 | `<table action="ENGINE/CHARSET/TABLESPACE">` 一个值都没给     | 全方言                           | E050       | 至少给 `engine` / `charset` / `collate` / `tablespace` 之一 |
-| `DROP TABLE` / `DROP COLUMN` / `<delete>`                     | 全方言（默认）                   | E030       | 显式配置 `allowDestructive="true"`                          |
 | 复合主键中包含自增列                                          | SQLite                           | 编译期异常 | 自增列必须单独作为主键                                      |
 | `foreignKey="x"`（非 `表.列` 格式）                           | 全方言                           | E031       | 写成 `表名.列名`                                            |
 | 未识别的表级 `action`（如 `PARTITION` / `GRANT` / `SYNONYM`） | 全方言                           | E012       | 改用 `<rawSql>`（见 4.7.3）                                 |
@@ -2670,7 +2667,7 @@ public sealed class CompileDiagnostic
 | W015 | 列级 `charset` / `collate` 被非 MySQL 方言忽略                              |
 | W016 | 列级 `foreignKey` 被忽略（MySQL 的 `ADD/MODIFY COLUMN` 不支持内联外键）     |
 | W017 | 索引 `type` 不被方言支持（`FULLTEXT` 等），按普通索引生成                   |
-| W018 | 表级 `REBUILD` 仅做破坏性校验，未生成重建 SQL                               |
+| W018 | 表级 `REBUILD` 按 `ALTER` 处理，未生成重建 SQL                              |
 | W019 | 配置项 `includeRollback` 当前不生效（回滚请用 `rollback --target-release`） |
 | W021 | `table="*"` 展开为 N 张表（列出表名）                                       |
 | W022 | `table="*"` 离线编译保留为占位符，需 `apply` 连库后展开                     |
@@ -2704,7 +2701,6 @@ public sealed class CompileDiagnostic
 | E027      | full 模式（`incrementalModify=false`）的 `MODIFY` 未声明 `type` 与 `nullable`                     |
 | E028      | 增量模式的 `MODIFY` 未声明任何属性                                                                |
 | E029      | 同一变更单元内同一表同一列重复出现                                                                |
-| E030      | 破坏性操作未启用 `options.allowDestructive`                                                       |
 | E040      | 基线已冻结，只允许 `CREATE` / `ADD` 类操作                                                        |
 | E101–E105 | 重复 ADD / MODIFY 目标冲突 / ADD-DROP 矛盾 / RENAME 目标冲突 / RENAME 后仍引用旧名                |
 | E106–E110 | DROP 不存在列 / `depends` 指向不存在的单元 / 补丁缺 `depends` / 跨单元顺序矛盾 / 变更单元 id 重复 |
@@ -3183,12 +3179,14 @@ if (!result.Success)
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DryRun`                           | 只编译并返回 SQL，不执行（`result.Sql` 可取到完整脚本）                                                                                                    |
 | `AppliedBy`                        | 执行人，写入状态文件                                                                                                                                       |
-| `ConnectionString` + `LockFactory` | 需要库级互斥时提供（只用 `ConnectionString` 取锁，执行仍走注入的执行器）；两者都不给则不加锁                                                               |
+| `ConnectionString` + `LockFactory` | 需要库级互斥时提供（只用 `ConnectionString` 取锁，执行仍走注入的执行器）；两者都不给则不加锁，组件只在同进程内串行化 `DbUpgrade`，多实例部署必须提供两者（未提供时通过 `Log` 告警） |
 | `LockTimeoutSeconds`               | 锁等待秒数，0 表示用配置里的 `lockTimeoutSeconds`                                                                                                          |
 | `ContinueOnError`                  | 失败后继续其余表 / 单元。默认 `null`：无事务 DDL 方言（MySQL / MariaDB）继续，事务方言（PG / SS / SQLite）遇错即停；结果用 `Failures` / `FailedCount` 汇总 |
-| `Restart` / `MarkAppliedChangeId`  | 等价 CLI 的 `--restart` / `--mark-applied`                                                                                                                 |
+| `Restart` / `MarkAppliedChangeId`  | 等价 CLI 的 `--restart` / `--mark-applied`；`MarkAppliedChangeId` 与 `DryRun` 互斥（会写状态文件），同时提供时返回失败（`ExitCode=1`）                      |
 
-`DbChronicleOptions` 支持两种配置来源：`ConfigPath`（加载 XML，默认）或 `Config`（代码内构造的配置对象，优先）。后者适合宿主在内存里调整方言 / 路径 / 环境后直接交给组件，不必为了改方言而落盘临时配置文件：
+变更目录为空（`Paths.Migrations` 指错或单元被删光）时 `DbUpgrade` 返回失败（`ExitCode=1`，`Message` 含迁移目录路径），不再静默成功。
+
+`DbChronicleOptions` 支持两种配置来源：`ConfigPath`（加载 XML，默认）或 `Config`（代码内构造的配置对象，优先）。`ConfigPath` 的相对路径按宿主程序目录（`AppContext.BaseDirectory`）解析，与进程当前目录无关；`Config` 未设置 `BaseDirectory` 时同样按宿主程序目录补齐，避免 Windows 服务下相对路径落到 `C:\Windows\System32`。后者适合宿主在内存里调整方言 / 路径 / 环境后直接交给组件，不必为了改方言而落盘临时配置文件：
 
 ```csharp
 var config = ConfigLoader.Load("DbchronicleConfig.xml");
@@ -3199,11 +3197,9 @@ var db = DbChronicleFactory.Create(executor, new DbChronicleOptions { Config = c
 var result = db.DbUpgrade();
 ```
 
-同一实例还提供 `Compile`（只生成 SQL）、`Check`（语义检查）、`Status`（读状态文件）、`LoadUnits`。CLI 属于"工具"形态，内部直接用编排器（`SchemaExecutor` / `RollbackService`）以覆盖 `--backfill-logs` / `--check-drift` / `rollback` 等运维命令；宿主应用统一走工厂入口即可。
+同一实例还提供 `Compile`（只生成 SQL，变更目录为空或 `changeId` 未命中时抛 `InvalidOperationException`）、`Check`（解析 + 方言编译 + 变更链语义校验，与 CLI `check` 等价，错误与警告一并返回）、`Status`（读本地状态文件，含失败记录）、`PendingUnits`（未应用单元）、`LoadUnits`，便于宿主自己做流程编排（例如启动时只 `Check`、发布流水线里才 `DbUpgrade`）。CLI 属于"工具"形态，内部直接用编排器（`SchemaExecutor` / `RollbackService`）以覆盖 `--backfill-logs` / `--check-drift` / `rollback` 等运维命令；宿主应用统一走工厂入口即可。
 
-同一实例还提供 `Compile`（只生成 SQL）、`Check`（语义检查）、`Status`（读版本表）、`LoadUnits`，便于宿主自己做流程编排（例如启动时只 `Check`、发布流水线里才 `DbUpgrade`）。
-
-**约束：** 一个数据库对应一套变更链（`change_id` 是版本表主键）。需要多套独立变更链时，用不同的数据库实例（演示见 `Test/DbChronicle.Demo --embedded`，它会创建独立的 `dbchronicle_embedded_demo` 库）。
+**约束：** 一个数据库对应一套变更链（`change_id` 是状态文件中已应用记录的唯一键）。需要多套独立变更链时，用不同的数据库实例（演示见 `Test/DbChronicle.Demo --embedded`，它会创建独立的 `dbchronicle_embedded_demo` 库）。
 
 **宿主启动即升级（由宿主自己决定，组件不内置 `IHostedService`）：** 升级时机属于宿主的生命周期决策，组件只提供 `IDbChronicle.DbUpgrade()`。宿主若想"启动时升级"，自己写一个 hosted service：
 
@@ -3693,7 +3689,7 @@ db-chronicle compile --config DbchronicleConfig.xml --pending --emit pipe
 db-chronicle compile --config DbchronicleConfig.xml --pending --pipe dbchronicle-upgrade
 
 # 零配置模式（嵌入式宿主）：不读也不生成配置文件，全部取值来自命令行
-db-chronicle compile --no-config --migrations ./migrations --dialect postgres --allow-destructive --emit pipe
+db-chronicle compile --no-config --migrations ./migrations --dialect postgres --emit pipe
 
 # 应用到数据库（checksum 强校验，按 (release, change_id) 排序执行）
 db-chronicle apply --config DbchronicleConfig.xml
@@ -4597,7 +4593,7 @@ Tools/
 | `options.includeRollback` / `options.statementDelimiter` | 参与编译选项            | `statementDelimiter` 已生效（传给拆分器）；`includeRollback` 仅解析并输出 W019（回滚走 `rollback` 独立命令）                                                        | 回滚产物无法通用，改为独立命令                                                          |
 | 诊断码范围                                               | W001~W022               | 扩展到 W001~W030（新增 W023~W030）与 E042 / E043、E101~E110                                                                                                         | 覆盖 SQLite / MySQL 5.7 限制、SEED 冲突、rebuild 限制与语义冲突细分                     |
 | `status` / `verify-checksum` 的连接需求                  | 表内标注"是"            | 不连数据库，只读 `version_log` 下的状态文件                                                                                                                         | 状态本就不落库，离线可查更符合定位                                                      |
-| 表级 `action="REBUILD"`                                  | 重建表                  | 按 `ALTER` 处理（仅做破坏性校验），输出 W018                                                                                                                        | MySQL/PG/SS 的重建语义差异大，SQLite 已由 `RequiresRebuild` 自动处理                    |
+| 表级 `action="REBUILD"`                                  | 重建表                  | 按 `ALTER` 处理，输出 W018                                                                                                                        | MySQL/PG/SS 的重建语义差异大，SQLite 已由 `RequiresRebuild` 自动处理                    |
 | 表级 `ENGINE` / `CHARSET` / `TABLESPACE`                 | 4.1.2 列出专用 action   | 报 E012 并提示改用 `<rawSql>`                                                                                                                                       | 4.1.11 已规定高级对象统一走 `RawSqlOperation`                                           |
 | `rollback` 对 SQLite 的列定义回滚                        | 未细化                  | 直接标记 blocker："需要整表重建，请手工执行"                                                                                                                        | SQLite 的 `MODIFY` 回滚等价于一次 rebuild（需要完整目标结构），保守阻断比生成半成品安全 |
 
@@ -4701,6 +4697,21 @@ MySQL 实测中发现并修复的问题（已加回归测试）：
 验证：`dotnet build` 0 警告 0 错误；`dotnet test` **234/234 通过**（Tests 162 + Scanner 7 + Cli 30 + Integration 35）。
 
 仍需人工确认：PostgreSQL / SQL Server 真库 `apply` / `verify-checksum` / `rollback`（本机未提供实例），本轮的 SS / PG 修复只有编译输出断言。
+
+### 16.8 2026-11-27 内嵌 API（`IDbChronicle`）修复记录
+
+| 项                | 修复内容                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `Check()`         | 改为「逐单元编译（含解析期诊断 E0xx/W0xx）+ `ChangeChecker`」，与 CLI `check` 等价；编译异常转 E043                                      |
+| 空目录 / 未知 id  | `Compile` 在变更目录为空或 `changeId` 未命中时抛 `InvalidOperationException`；`SchemaExecutor.ApplyWith` 在 0 单元时返回失败（`ExitCode=1`） |
+| 语句分隔符        | `SchemaExecutor.ApplyWith` / `BackfillLogs` 补 `StatementDelimiter`，`compile` / `check` 与 `apply` 的语句切分一致                        |
+| dry-run           | `DryRun` 与 `MarkAppliedChangeId` 同时提供时拒绝执行（`ExitCode=1`），不再在 dry-run 下写状态文件                                          |
+| 状态查询          | `Status` 注释改为本地状态文件语义；新增 `PendingUnits()`（状态文件无记录或记录为失败）                                                    |
+| 并发              | `DbUpgrade` 按状态文件路径做进程内互斥；未同时提供 `ConnectionString` + `LockFactory` 时通过 `Log` 告警（跨进程互斥需两者）                |
+| 路径              | 相对 `ConfigPath` 按 `AppContext.BaseDirectory` 解析；`Config.BaseDirectory` 为空时补齐，避免 Windows 服务下相对路径落到 `System32`        |
+| 结果语义          | `DbUpgradeResult.Sql` 注释明确「含已跳过单元」；`ExitCode` 注明对齐 CLI 退出码，进程内调用可忽略                                          |
+
+验证：核心库与整个解决方案 `dotnet build` 0 错误（仅 net6.0 EOL 提示）；`DbChronicle.Tests` 198 通过（含新增 8 条内嵌 API 用例）、`Scanner.Tests` 7 通过、`IntegrationTests` 35 通过。
 
 ---
 

@@ -135,7 +135,7 @@ namespace DbChronicle.Cli
             "dialect", "db-version", "environment", "migrations", "version-log",
             "baseline", "baseline-frozen", "no-baseline-frozen", "baseline-frozen-at",
             "quote-identifiers", "no-quote-identifiers", "sql-comments", "no-sql-comments",
-            "include-rollback", "no-include-rollback", "allow-destructive",
+            "include-rollback", "no-include-rollback",
             "incremental-modify", "no-incremental-modify", "statement-delimiter",
             "lock-timeout", "commit-scope", "commit-batch-size" };
 
@@ -225,7 +225,7 @@ namespace DbChronicle.Cli
             Console.WriteLine("          --environment <name> / --version-log <dir> / --output-dir <dir>");
             Console.WriteLine("          --baseline <file> / --baseline-frozen / --no-baseline-frozen / --baseline-frozen-at <v>");
             Console.WriteLine("          --quote-identifiers / --no-quote-identifiers / --sql-comments / --no-sql-comments");
-            Console.WriteLine("          --include-rollback / --no-include-rollback / --allow-destructive");
+            Console.WriteLine("          --include-rollback / --no-include-rollback");
             Console.WriteLine("          --incremental-modify / --no-incremental-modify / --statement-delimiter <s>");
             Console.WriteLine("          --lock-timeout <sec> / --commit-scope <unit|table|batch> / --commit-batch-size <n>");
             Console.WriteLine("          以上参数与配置文件中的同名字段一一对应，全部可由命令行覆盖");

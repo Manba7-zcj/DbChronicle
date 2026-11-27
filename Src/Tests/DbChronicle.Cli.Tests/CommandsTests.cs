@@ -281,7 +281,6 @@ namespace DbChronicle.Cli.Tests
                 "--commit-scope", "table",
                 "--commit-batch-size", "3",
                 "--no-incremental-modify",
-                "--allow-destructive",
                 "--output-dir", outputDirectory
             });
             Capture(() => Commands.Compile(args));

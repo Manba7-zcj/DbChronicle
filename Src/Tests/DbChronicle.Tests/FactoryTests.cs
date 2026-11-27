@@ -115,6 +115,185 @@ namespace DbChronicle.Tests
             Assert.Throws<ArgumentNullException>(() => DbChronicleFactory.Create(null, o => { }));
         }
 
+        [Fact]
+        public void Check_ShouldIncludeParseDiagnostics()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "20261127_100000_parse",
+                "  <table action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var diagnostics = chronicle.Check();
+
+                Assert.Contains(diagnostics, x => x.Code == "E010" && x.Severity == DiagnosticSeverity.Error);
+            }
+        }
+
+        [Fact]
+        public void Check_ShouldIncludeDialectDiagnostics()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "20261127_100001_seq",
+                "  <sequence name=\"seq_order\" action=\"CREATE\" start=\"1\"/>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "sqlite";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var diagnostics = chronicle.Check();
+
+                Assert.Contains(diagnostics, x => x.Code == "E046" && x.Severity == DiagnosticSeverity.Error);
+            }
+        }
+
+        [Fact]
+        public void Compile_ShouldThrow_WhenChangeIdNotFound()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "00000000_000000_baseline",
+                "  <table name=\"t\" action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var error = Assert.Throws<InvalidOperationException>(
+                    () => chronicle.Compile("20990101_000000_missing"));
+
+                Assert.Contains("20990101_000000_missing", error.Message);
+            }
+        }
+
+        [Fact]
+        public void Compile_ShouldThrow_WhenMigrationsDirectoryIsEmpty()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => chronicle.Compile());
+
+                Assert.Contains("未找到变更单元", error.Message);
+            }
+        }
+
+        [Fact]
+        public void DbUpgrade_ShouldFail_WhenMigrationsDirectoryIsEmpty()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var result = chronicle.DbUpgrade(new DbUpgradeOptions { DryRun = true });
+
+                Assert.False(result.Success);
+                Assert.Equal(1, result.ExitCode);
+                Assert.Contains("未找到变更单元", result.Message);
+            }
+        }
+
+        [Fact]
+        public void DbUpgrade_ShouldRejectDryRunWithMarkApplied()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "00000000_000000_baseline",
+                "  <table name=\"t\" action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var result = chronicle.DbUpgrade(new DbUpgradeOptions
+                {
+                    DryRun = true,
+                    MarkAppliedChangeId = "00000000_000000_baseline"
+                });
+
+                Assert.False(result.Success);
+                Assert.Equal(1, result.ExitCode);
+                Assert.Contains("dry-run", result.Message);
+            }
+        }
+
+        [Fact]
+        public void DbUpgrade_ShouldSplitRawSqlWithConfiguredDelimiter()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "20261127_100002_raw",
+                "  <rawSql name=\"t\">CREATE TABLE a (id INT);\nGO\nCREATE TABLE b (id INT);\nGO</rawSql>");
+
+            var config = new DbChronicleConfig { BaseDirectory = directory };
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            config.Paths.VersionLog = "version_log";
+            config.Options.StatementDelimiter = "GO";
+
+            var recorder = new RecordingExecutor();
+            using (var chronicle = DbChronicleFactory.Create(recorder, new DbChronicleOptions { Config = config }))
+            {
+                var result = chronicle.DbUpgrade();
+
+                Assert.True(result.Success, result.Message);
+                Assert.Equal(2, recorder.Executed.Count);
+            }
+        }
+
+        [Fact]
+        public void PendingUnits_ShouldReturnAllUnits_WhenStateIsEmpty()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "00000000_000000_baseline",
+                "  <table name=\"t\" action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var config = new DbChronicleConfig { BaseDirectory = directory };
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            config.Paths.VersionLog = "version_log";
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), new DbChronicleOptions { Config = config }))
+            {
+                Assert.Single(chronicle.PendingUnits());
+                Assert.Empty(chronicle.Status());
+            }
+        }
+
         private sealed class OfflineExecutor : IDbExecutor
         {
             public string DialectName
@@ -129,6 +308,52 @@ namespace DbChronicle.Tests
 
             public void Execute(string sql)
             {
+            }
+
+            public object Scalar(string sql)
+            {
+                return null;
+            }
+
+            public List<Dictionary<string, object>> Query(string sql)
+            {
+                return new List<Dictionary<string, object>>();
+            }
+
+            public void BeginTransaction()
+            {
+            }
+
+            public void Commit()
+            {
+            }
+
+            public void Rollback()
+            {
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        private sealed class RecordingExecutor : IDbExecutor
+        {
+            public List<string> Executed { get; } = new List<string>();
+
+            public string DialectName
+            {
+                get { return "mysql"; }
+            }
+
+            public bool SupportsTransactionalDdl
+            {
+                get { return false; }
+            }
+
+            public void Execute(string sql)
+            {
+                Executed.Add(sql);
             }
 
             public object Scalar(string sql)

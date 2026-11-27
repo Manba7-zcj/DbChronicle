@@ -18,7 +18,7 @@
     避免出现"无法补全"的 W014；有基线的项目可改回 incrementalModify="true" 只写变化项。
   -->
   <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
-           statementDelimiter=";" allowDestructive="false"
+           statementDelimiter=";"
            lockTimeoutSeconds="10" incrementalModify="false"
            commitScope="table" commitBatchSize="10" />
 </dbchronicle>

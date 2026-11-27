@@ -77,7 +77,6 @@ namespace DbChronicle.Configuration
                 config.Options.IncludeComments = BoolAttr(options, "includeComments", config.Options.IncludeComments);
                 config.Options.IncludeRollback = BoolAttr(options, "includeRollback", config.Options.IncludeRollback);
                 config.Options.StatementDelimiter = Attr(options, "statementDelimiter") ?? config.Options.StatementDelimiter;
-                config.Options.AllowDestructive = BoolAttr(options, "allowDestructive", config.Options.AllowDestructive);
                 config.Options.LockTimeoutSeconds = IntAttr(options, "lockTimeoutSeconds", config.Options.LockTimeoutSeconds);
                 config.Options.IncrementalModify = BoolAttr(options, "incrementalModify", config.Options.IncrementalModify);
                 config.Options.CommitScope = Attr(options, "commitScope") ?? config.Options.CommitScope;
@@ -122,7 +121,6 @@ namespace DbChronicle.Configuration
                         new XAttribute("includeComments", config.Options.IncludeComments ? "true" : "false"),
                         new XAttribute("includeRollback", config.Options.IncludeRollback ? "true" : "false"),
                         new XAttribute("statementDelimiter", config.Options.StatementDelimiter ?? ";"),
-                        new XAttribute("allowDestructive", config.Options.AllowDestructive ? "true" : "false"),
                         new XAttribute("lockTimeoutSeconds", config.Options.LockTimeoutSeconds),
                         new XAttribute("incrementalModify", config.Options.IncrementalModify ? "true" : "false"),
                         new XAttribute("commitScope", config.Options.CommitScope ?? "unit"),

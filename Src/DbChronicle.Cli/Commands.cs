@@ -219,11 +219,6 @@ namespace DbChronicle.Cli
             ApplyBoolOption(args, "include-rollback", "no-include-rollback", value => config.Options.IncludeRollback = value);
             ApplyBoolOption(args, "incremental-modify", "no-incremental-modify", value => config.Options.IncrementalModify = value);
 
-            if (args.Has("allow-destructive"))
-            {
-                config.Options.AllowDestructive = true;
-            }
-
             var delimiter = args.Get("statement-delimiter", null);
             if (!string.IsNullOrEmpty(delimiter))
             {

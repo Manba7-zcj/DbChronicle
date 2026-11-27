@@ -29,6 +29,16 @@ namespace DbChronicle.Diagnostics
         public const string ObjectCommentUnsupported = "W031";
         public const string DialectSqlMissing = "W032";
         public const string DataMigrationSqlMissing = "W033";
+        public const string LateSubmissionPatch = "W046";
+        public const string ChainTableMissing = "E111";
+        public const string ChainColumnMissing = "E112";
+        public const string ChainColumnAlreadyExists = "E113";
+        public const string ChainPrimaryKeyInvalid = "E114";
+        public const string ChainObjectMissing = "E115";
+        public const string ChainForeignKeyTargetMissing = "E116";
+        public const string ChainRenameSourceMissing = "E117";
+        public const string ChainSeedColumnsInvalid = "E118";
+        public const string ChainStageBeforeReference = "E119";
         public const string AutoIncrementModifyUnsupported = "E052";
         public const string ColumnReorderBeforeUnsupported = "E053";
         public const string ColumnReorderUnsupported = "E044";

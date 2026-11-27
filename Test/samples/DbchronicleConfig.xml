@@ -8,6 +8,6 @@
          output="./output" />
   <baseline file="./migrations/00000000_000000_baseline.xml" frozen="true" frozenAt="2026-10-22" />
   <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
-           statementDelimiter=";" allowDestructive="false"
+           statementDelimiter=";"
            lockTimeoutSeconds="10" incrementalModify="true" />
 </dbchronicle>

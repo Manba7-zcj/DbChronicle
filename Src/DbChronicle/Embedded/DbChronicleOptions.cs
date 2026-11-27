@@ -9,12 +9,13 @@ namespace DbChronicle.Embedded
     /// </summary>
     public sealed class DbChronicleOptions
     {
-        /// <summary>启动配置文件路径（DbchronicleConfig.xml）。</summary>
+        /// <summary>启动配置文件路径（DbchronicleConfig.xml）；相对路径按宿主程序目录（AppContext.BaseDirectory）解析，与进程当前目录无关。</summary>
         public string ConfigPath { get; set; }
 
         /// <summary>
         /// 直接提供已构造好的配置（优先于 <see cref="ConfigPath"/>），
         /// 适合宿主在代码里调整方言 / 路径后交给组件。
+        /// <see cref="DbChronicleConfig.BaseDirectory"/> 为空时按宿主程序目录补齐。
         /// </summary>
         public DbChronicleConfig Config { get; set; }
 

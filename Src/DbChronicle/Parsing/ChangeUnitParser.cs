@@ -249,10 +249,6 @@ namespace DbChronicle.Parsing
                     break;
 
                 case "DROP":
-                    if (!RequireDestructive(unit, tableName, null))
-                    {
-                        return;
-                    }
                     unit.Operations.Add(new DropTableOperation { Table = tableName });
                     break;
 
@@ -274,12 +270,8 @@ namespace DbChronicle.Parsing
                 case "REBUILD":
                     if (action == "REBUILD")
                     {
-                        if (!RequireDestructive(unit, tableName, null))
-                        {
-                            return;
-                        }
                         unit.Diagnostics.Add(CompileDiagnostic.Warning("W018",
-                            "表 " + tableName + " 的 REBUILD 仅做破坏性校验，按 ALTER 处理（SQLite 会自动 rebuild，其他方言请用 <rawSql>）"));
+                            "表 " + tableName + " 的 REBUILD 按 ALTER 处理（SQLite 会自动 rebuild，其他方言请用 <rawSql>）"));
                     }
                     ParseAlterTable(unit, tableElement, tableName);
                     break;
@@ -522,10 +514,6 @@ namespace DbChronicle.Parsing
                     break;
 
                 case "delete":
-                    if (!RequireDestructive(unit, tableName, null))
-                    {
-                        break;
-                    }
                     unit.Operations.Add(new DeleteOperation
                     {
                         Table = tableName,
@@ -646,11 +634,6 @@ namespace DbChronicle.Parsing
                 default:
                     AddError(unit, "E013", tableName, Attr(element, "name"), "未知的列级 action：" + actionText);
                     return null;
-            }
-
-            if (action == ColumnAction.Drop && !RequireDestructive(unit, tableName, Attr(element, "name")))
-            {
-                return null;
             }
 
             var definition = ParseColumn(unit, element, tableName, false);
@@ -812,16 +795,6 @@ namespace DbChronicle.Parsing
             }
 
             return definition;
-        }
-
-        private bool RequireDestructive(ChangeUnit unit, string tableName, string columnName)
-        {
-            if (_config.Options.AllowDestructive)
-            {
-                return true;
-            }
-            AddError(unit, "E030", tableName, columnName, "破坏性操作被拒绝（需要 options.allowDestructive: true）");
-            return false;
         }
 
         private void ValidateFileName(ChangeUnit unit, string path)

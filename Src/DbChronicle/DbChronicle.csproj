@@ -15,6 +15,7 @@
   <!-- 核心库零第三方依赖：不引用任何数据库驱动，也不引用宿主框架 -->
   <ItemGroup>
     <EmbeddedResource Include="Common\Resources\dialects\*.types.xml" LogicalName="DbChronicle.dialects.%(Filename)%(Extension)" />
+    <None Include="Schema\*.xsd" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

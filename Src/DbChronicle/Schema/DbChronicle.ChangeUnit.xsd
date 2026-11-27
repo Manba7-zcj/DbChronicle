@@ -1,0 +1,1164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="unqualified"
+           attributeFormDefault="unqualified">
+
+  <xs:annotation>
+    <xs:documentation>
+      DbChronicle 逻辑模型（变更单元）XML Schema。
+      用于编辑器补全与即时校验；语义校验（重复 ADD、DROP 不存在列、跨单元依赖、方言能力）由 db-chronicle check 完成。
+      元素顺序不敏感：同一父节点下子元素可任意顺序、可重复出现。
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:simpleType name="BooleanLiteral">
+    <xs:annotation>
+      <xs:documentation>布尔字面量：true / false。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="true">
+        <xs:annotation>
+          <xs:documentation>真：布尔或位类型取真值。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="false">
+        <xs:annotation>
+          <xs:documentation>假：布尔或位类型取假值。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ChangeId">
+    <xs:annotation>
+      <xs:documentation>变更单元 id：8 位日期开头，通常为 yyyyMMdd_HHmmss_短哈希；必须与文件名前缀一致。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{8}(_[A-Za-z0-9_.-]+)*" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Release">
+    <xs:annotation>
+      <xs:documentation>发布版本：8 位日期 yyyyMMdd；基线固定 00000000；不得晚于当前日期 + 1 天。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{8}" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="LogicalType">
+    <xs:annotation>
+      <xs:documentation>逻辑类型（区分大小写）。禁止写物理类型（VARCHAR / TINYINT 等）。String / FixedString / Binary 必须同时给 length。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Boolean">
+        <xs:annotation>
+          <xs:documentation>布尔：映射 TINYINT(1)、BOOLEAN 或 BIT。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Int8">
+        <xs:annotation>
+          <xs:documentation>8 位有符号整数：映射 TINYINT。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Int16">
+        <xs:annotation>
+          <xs:documentation>16 位有符号整数：映射 SMALLINT。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Int32">
+        <xs:annotation>
+          <xs:documentation>32 位有符号整数：映射 INT / INTEGER。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Int64">
+        <xs:annotation>
+          <xs:documentation>64 位有符号整数：映射 BIGINT。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Float32">
+        <xs:annotation>
+          <xs:documentation>32 位浮点数：映射 FLOAT / REAL。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Float64">
+        <xs:annotation>
+          <xs:documentation>64 位浮点数：映射 DOUBLE / DOUBLE PRECISION。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Decimal">
+        <xs:annotation>
+          <xs:documentation>定点小数：映射 DECIMAL / NUMERIC，配合 precision 与 scale。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="FixedString">
+        <xs:annotation>
+          <xs:documentation>定长字符串：映射 CHAR(n)，必须同时给 length。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="String">
+        <xs:annotation>
+          <xs:documentation>变长字符串：映射 VARCHAR(n)，必须同时给 length。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Text">
+        <xs:annotation>
+          <xs:documentation>长文本：映射 TEXT / CLOB，不需要 length。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Json">
+        <xs:annotation>
+          <xs:documentation>JSON 文本：映射 JSON / JSONB，方言支持程度不同。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Xml">
+        <xs:annotation>
+          <xs:documentation>XML 文本：映射 XML 或 TEXT，方言支持程度不同。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="DateTime">
+        <xs:annotation>
+          <xs:documentation>日期时间（无时区）：映射 DATETIME / TIMESTAMP。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="DateTimeOffset">
+        <xs:annotation>
+          <xs:documentation>带时区偏移的日期时间：PostgreSQL 映射 TIMESTAMPTZ、SQL Server 映射 DATETIMEOFFSET；MySQL / MariaDB 降级为 TIMESTAMP（W003，不保留偏移），SQLite 映射 TEXT。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Date">
+        <xs:annotation>
+          <xs:documentation>日期：映射 DATE。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Time">
+        <xs:annotation>
+          <xs:documentation>时间：映射 TIME。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Binary">
+        <xs:annotation>
+          <xs:documentation>定长二进制：映射 BINARY(n)，必须同时给 length。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Blob">
+        <xs:annotation>
+          <xs:documentation>二进制大对象：映射 BLOB / BYTEA / IMAGE。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="Uuid">
+        <xs:annotation>
+          <xs:documentation>UUID / GUID：映射 UUID / UNIQUEIDENTIFIER。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TableAction">
+    <xs:annotation>
+      <xs:documentation>表级动作（解析大小写不敏感，推荐大写）。CREATE/ALTER 使用列与约束子节点；RENAME 需要 newName；ENGINE/CHARSET/TABLESPACE 需要 engine/charset/collate/tablespace 至少一项。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CREATE">
+        <xs:annotation>
+          <xs:documentation>新建表：使用 column / constraint 等子节点定义结构。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="ALTER">
+        <xs:annotation>
+          <xs:documentation>修改表：使用 column / index / primaryKey / foreignKey 等子节点描述变更。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="DROP">
+        <xs:annotation>
+          <xs:documentation>删除表：只写 name；会直接生成 DROP TABLE 语句。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="RENAME">
+        <xs:annotation>
+          <xs:documentation>重命名表：需要 newName。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="COMMENT">
+        <xs:annotation>
+          <xs:documentation>修改表注释：配合 comment 使用。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="REBUILD">
+        <xs:annotation>
+          <xs:documentation>重建表：按 ALTER 处理（W018），SQLite 在需要时自动 rebuild，其他方言请改用 &lt;rawSql&gt;。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="ENGINE">
+        <xs:annotation>
+          <xs:documentation>修改存储引擎：MySQL / MariaDB，配合 engine。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="CHARSET">
+        <xs:annotation>
+          <xs:documentation>修改字符集或排序规则：MySQL / MariaDB，配合 charset 与 collate。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="TABLESPACE">
+        <xs:annotation>
+          <xs:documentation>修改表空间：PostgreSQL 等，配合 tablespace。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ColumnAction">
+    <xs:annotation>
+      <xs:documentation>列级动作（缺省 ADD）。MODIFY 在 incrementalModify=true 时只写变化项，full 模式必须写 type 与 nullable；RENAME 需要 renamedFrom；REORDER 需要 after（仅 MySQL/MariaDB，其余方言报 E044）。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ADD">
+        <xs:annotation>
+          <xs:documentation>新增列：必须给 name，并通常给 type；String / FixedString / Binary 还要给 length。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="MODIFY">
+        <xs:annotation>
+          <xs:documentation>修改列：incrementalModify=true 时只写变化项；full 模式必须写 type 与 nullable。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="DROP">
+        <xs:annotation>
+          <xs:documentation>删除列：会直接生成 DROP COLUMN 语句。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="RENAME">
+        <xs:annotation>
+          <xs:documentation>重命名列：需要 renamedFrom。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="COMMENT">
+        <xs:annotation>
+          <xs:documentation>修改列注释：配合 comment 使用。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="REORDER">
+        <xs:annotation>
+          <xs:documentation>调整列顺序：需要 after；仅 MySQL / MariaDB，其余方言报 E044。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ObjectAction">
+    <xs:annotation>
+      <xs:documentation>对象（索引 / 主键 / 唯一 / 检查 / 默认值 / 外键 / 视图 / 序列）动作（缺省 ADD）。DROP 只写 name；RENAME 需要 newName。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ADD">
+        <xs:annotation>
+          <xs:documentation>新增对象：索引、主键、唯一约束、检查约束、默认值、外键等。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="CREATE">
+        <xs:annotation>
+          <xs:documentation>创建对象：视图、序列、触发器、存储过程、函数等。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="DROP">
+        <xs:annotation>
+          <xs:documentation>删除对象：只写 name，会直接生成 DROP 语句。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="RENAME">
+        <xs:annotation>
+          <xs:documentation>重命名对象：需要 newName。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="REPLACE">
+        <xs:annotation>
+          <xs:documentation>创建或替换对象：视图、存储过程、函数等。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="MODIFY">
+        <xs:annotation>
+          <xs:documentation>修改对象定义：如修改视图查询、过程体等。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="COMMENT">
+        <xs:annotation>
+          <xs:documentation>修改对象注释：配合 comment 使用。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Stage">
+    <xs:annotation>
+      <xs:documentation>数据操作时机：before = 所有结构变更之前（只能引用变更前已存在的表列）；after（缺省）= 该表结构变更之后。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="before">
+        <xs:annotation>
+          <xs:documentation>在所有结构变更之前执行；只能引用变更前已存在的表列。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="after">
+        <xs:annotation>
+          <xs:documentation>在该表结构变更之后执行（缺省）。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ReferentialAction">
+    <xs:annotation>
+      <xs:documentation>外键级联动作（原样传给方言，取值 CASCADE / SET NULL / RESTRICT / NO ACTION / SET DEFAULT）。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CASCADE">
+        <xs:annotation>
+          <xs:documentation>级联：父记录删除或更新时，同时删除或更新子表记录。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="SET NULL">
+        <xs:annotation>
+          <xs:documentation>置空：父记录删除或更新时，把子表外键列置为 NULL。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="RESTRICT">
+        <xs:annotation>
+          <xs:documentation>限制：存在子记录时拒绝删除或更新父记录。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="NO ACTION">
+        <xs:annotation>
+          <xs:documentation>不执行动作：由数据库在语句结束时检查外键约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="SET DEFAULT">
+        <xs:annotation>
+          <xs:documentation>置默认值：父记录删除或更新时，把子表外键列置为默认值。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="SeedConflict">
+    <xs:annotation>
+      <xs:documentation>种子数据冲突策略：IGNORE / UPDATE；缺省为普通 INSERT。SQL Server 不支持，降级并告警 W029。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="IGNORE">
+        <xs:annotation>
+          <xs:documentation>冲突时忽略新行：INSERT IGNORE / ON CONFLICT DO NOTHING。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="UPDATE">
+        <xs:annotation>
+          <xs:documentation>冲突时更新已有行：ON DUPLICATE KEY UPDATE / ON CONFLICT DO UPDATE。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="IndexKind">
+    <xs:annotation>
+      <xs:documentation>索引类型：NORMAL / UNIQUE / FULLTEXT / SPATIAL（原样传给方言，方言不支持时报错或告警）。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="NORMAL">
+        <xs:annotation>
+          <xs:documentation>普通索引：不要求唯一。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="UNIQUE">
+        <xs:annotation>
+          <xs:documentation>唯一索引：索引列组合不允许重复值。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="FULLTEXT">
+        <xs:annotation>
+          <xs:documentation>全文索引：用于文本检索，方言支持程度不同。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="SPATIAL">
+        <xs:annotation>
+          <xs:documentation>空间索引：用于地理/几何类型，方言支持程度不同。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ConstraintKind">
+    <xs:annotation>
+      <xs:documentation>约束种类：用于定位约束注释的目标对象。</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="primaryKey">
+        <xs:annotation>
+          <xs:documentation>主键约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="unique">
+        <xs:annotation>
+          <xs:documentation>唯一约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="check">
+        <xs:annotation>
+          <xs:documentation>检查约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="foreignKey">
+        <xs:annotation>
+          <xs:documentation>外键约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="default">
+        <xs:annotation>
+          <xs:documentation>默认值约束。</xs:documentation>
+        </xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="DialectSqlType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>按方言的 SQL 片段：dialect 取 mysql / mariadb / postgresql / sqlserver / sqlite，any 或缺省表示所有方言通用。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="dialect" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>方言名（mysql / mariadb / postgresql / sqlserver / sqlite / any）。缺省为 any。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DependsType">
+    <xs:annotation>
+      <xs:documentation>显式依赖的变更单元 id。补丁文件必须声明 depends；依赖只做存在性与顺序校验，不改变物理执行顺序。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="on" type="ChangeId" use="required">
+      <xs:annotation>
+        <xs:documentation>被依赖的变更单元 id。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ColumnRefType">
+    <xs:annotation>
+      <xs:documentation>列引用：用于索引 / 主键 / 唯一约束 / 外键的列清单。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>列名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ColumnType">
+    <xs:annotation>
+      <xs:documentation>列定义 / 列操作。CREATE 表内必须给 type（String / FixedString / Binary 还要 length）；ALTER 表内 action 缺省 ADD。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>列名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ColumnAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>列级动作，缺省 ADD：ADD / MODIFY / DROP / RENAME / COMMENT / REORDER。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="type" type="LogicalType">
+      <xs:annotation>
+        <xs:documentation>逻辑类型（不是物理类型）。ADD 必填；MODIFY 在 full 模式下必填。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="length" type="xs:int">
+      <xs:annotation>
+        <xs:documentation>长度：String / FixedString / Binary 必填；Blob 写了会被忽略并告警 W005。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="precision" type="xs:int">
+      <xs:annotation>
+        <xs:documentation>精度：Decimal 使用。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="scale" type="xs:int">
+      <xs:annotation>
+        <xs:documentation>小数位：Decimal 使用。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="nullable" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否可空。incrementalModify=true 时不写表示保持原值；full 模式必须显式声明。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="primaryKey" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否主键。SQLite 的 ADD 列不支持，需走 rebuild。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="autoIncrement" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否自增。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="unique" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否唯一；MySQL / MariaDB / PostgreSQL / SQL Server / SQLite 的列定义都会生成内联 UNIQUE（若要命名或建复合唯一约束请用 &lt;uniqueConstraint&gt;）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="unsigned" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否无符号（仅整数类型有效，仅 MySQL/MariaDB 生效）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="defaultValue" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>默认值：null = 显式 NULL；'' = 空字符串；none = 删除默认值；CURRENT_TIMESTAMP 等函数形态原样透传。省略的含义由 incrementalModify 决定（true 保持原值 / false 目标无默认值）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="comment" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列注释；COMMENT 动作必填。PostgreSQL / SQL Server 支持；MySQL 需要完整列定义，否则跳过并告警 W007；SQLite 不支持，跳过并告警 W007。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="onUpdate" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>更新时刷新值（如 CURRENT_TIMESTAMP），仅 DateTime / DateTimeOffset 有效，仅 MySQL/MariaDB 生效。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="charset" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列字符集（MySQL/MariaDB）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="collate" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列排序规则（MySQL/MariaDB）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="foreignKey" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列级外键引用，格式必须是 表名.列名（例如 nor_dept.id）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="renamedFrom" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>重命名前的列名，action=RENAME 时必填。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="after" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列顺序位置（列名或 FIRST），action=REORDER 时使用；不支持 before，仅 MySQL/MariaDB 生效。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>仅数据类列操作有意义：before / after（缺省 after）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="IndexType">
+    <xs:annotation>
+      <xs:documentation>索引。列清单可写 columns="a,b"，也可用 &lt;columnRef name="a"/&gt; 子节点。DROP/RENAME 只写 name（RENAME 需 newName）。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="columnRef" type="ColumnRefType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>索引名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>索引动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="newName" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>重命名后的索引名，action=RENAME 时必填。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="unique" type="BooleanLiteral" default="false">
+      <xs:annotation>
+        <xs:documentation>是否唯一索引，缺省 false。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="type" type="IndexKind">
+      <xs:annotation>
+        <xs:documentation>索引类型：NORMAL / UNIQUE / FULLTEXT / SPATIAL。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="columns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列清单，逗号分隔（也可用 columnRef 子节点）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="expression" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表达式索引（方言支持时使用）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="where" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>部分索引条件（PostgreSQL / SQLite 支持）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="comment" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>索引注释（方言支持时使用）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="PrimaryKeyType">
+    <xs:annotation>
+      <xs:documentation>表主键。CREATE 表内可替代列上的 primaryKey="true"；ALTER 表内 action 缺省 ADD。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="columnRef" type="ColumnRefType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>主键约束名（可选）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="columns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>主键列清单，逗号分隔。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="UniqueConstraintType">
+    <xs:annotation>
+      <xs:documentation>唯一约束。列清单用 columns 或 columnRef 子节点。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="columnRef" type="ColumnRefType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>约束名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="columns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>列清单，逗号分隔。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="CheckConstraintType">
+    <xs:annotation>
+      <xs:documentation>检查约束。ADD 时 expression 必填；SQLite 会走表重建。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>约束名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="expression" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>检查表达式，例如 age &gt;= 0 AND age &lt;= 150（XML 中 &lt; &gt; &amp; 需转义或写进 CDATA）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DefaultConstraintType">
+    <xs:annotation>
+      <xs:documentation>独立默认值约束（SET DEFAULT）：MySQL 8+ / MariaDB / PostgreSQL / SQL Server 支持；MySQL 5.7 告警 W024 并跳过，SQLite 跳过并告警 W025。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>约束名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="column" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>目标列名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="value" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>默认值表达式，原样写入 DDL。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ForeignKeyType">
+    <xs:annotation>
+      <xs:documentation>外键。ADD 时 refTable 必填；refColumns 与 columns 一一对应。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="columnRef" type="ColumnRefType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>外键名。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD；DROP 时只写 name。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="columns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>本表列清单，逗号分隔。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="refTable" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>引用表名（ADD 时必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="refColumns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>引用列清单，逗号分隔。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="onDelete" type="ReferentialAction">
+      <xs:annotation>
+        <xs:documentation>删除时动作：CASCADE / SET NULL / RESTRICT / NO ACTION / SET DEFAULT。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="onUpdate" type="ReferentialAction">
+      <xs:annotation>
+        <xs:documentation>更新时动作：CASCADE / SET NULL / RESTRICT / NO ACTION / SET DEFAULT。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ConstraintCommentType">
+    <xs:annotation>
+      <xs:documentation>约束注释（PostgreSQL / SQL Server 使用）。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>约束名（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="kind" type="ConstraintKind">
+      <xs:annotation>
+        <xs:documentation>约束种类：primaryKey / unique / check / foreignKey / default。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="comment" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>注释内容。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DataMigrationType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>按方言的数据迁移 SQL。推荐每个 &lt;sql dialect="..."&gt; 一条；也可用 dialect 属性 + 节点内文本 / CDATA 直接写。缺当前方言时告警 W032。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="sql" type="DialectSqlType" />
+    </xs:choice>
+    <xs:attribute name="dialect" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。给新增列回填必须用 after，否则列还不存在。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="SeedRowType">
+    <xs:annotation>
+      <xs:documentation>种子数据行。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="values" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>值列表，与 seed 的 columns 一一对应；字符串用单引号，逗号分隔（引号内的逗号不会被拆分）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="SeedType">
+    <xs:annotation>
+      <xs:documentation>结构化种子数据。columns 必填；conflict 缺省为普通 INSERT。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="row" type="SeedRowType" />
+    </xs:choice>
+    <xs:attribute name="columns" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>列清单，逗号分隔（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="table" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>兼容属性：解析器忽略，实际归属由外层 &lt;table name="..."&gt; 决定。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="conflict" type="SeedConflict">
+      <xs:annotation>
+        <xs:documentation>冲突策略：IGNORE / UPDATE；缺省为普通 INSERT。SQL Server 不支持冲突策略，降级并告警 W029；UPDATE 在 PostgreSQL 需要主键、SQLite 需要 3.24+ 且主键，条件不满足时降级并告警 W029；IGNORE 不需要主键。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="UpdateType">
+    <xs:annotation>
+      <xs:documentation>按条件更新数据（UPDATE）。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="set" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>SET 子句，例如 status = 0（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="where" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>WHERE 子句；省略表示全表。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="DeleteType">
+    <xs:annotation>
+      <xs:documentation>按条件删除数据（DELETE）。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="where" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>WHERE 子句；省略表示全表删除（谨慎）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="CleanType">
+    <xs:annotation>
+      <xs:documentation>数据清洗：按规则把列置空 / 置默认值。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="rules" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>清洗规则，形如 email = NULL; phone = NULL（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="where" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>WHERE 子句；省略表示全表。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="BackfillType">
+    <xs:annotation>
+      <xs:documentation>回填单列：column 与 value 必填。给本次新增列回填要用 stage="after"。</xs:documentation>
+    </xs:annotation>
+    <xs:attribute name="column" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>目标列名（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="value" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>回填值原样写入 SQL（必填），例如 0 或 'unknown'。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="where" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>WHERE 子句；省略表示全表回填。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="TableType">
+    <xs:annotation>
+      <xs:documentation>表节点。action=CREATE 时子节点定义整表；action=ALTER 时子节点是增量操作；name="*" 表示库中所有表（必须连库执行，可用 tables 限定）。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="column" type="ColumnType" />
+      <xs:element name="index" type="IndexType" />
+      <xs:element name="primaryKey" type="PrimaryKeyType" />
+      <xs:element name="uniqueConstraint" type="UniqueConstraintType" />
+      <xs:element name="checkConstraint" type="CheckConstraintType" />
+      <xs:element name="defaultConstraint" type="DefaultConstraintType" />
+      <xs:element name="foreignKey" type="ForeignKeyType" />
+      <xs:element name="constraintComment" type="ConstraintCommentType" />
+      <xs:element name="dataMigration" type="DataMigrationType" />
+      <xs:element name="seed" type="SeedType" />
+      <xs:element name="update" type="UpdateType" />
+      <xs:element name="delete" type="DeleteType" />
+      <xs:element name="clean" type="CleanType" />
+      <xs:element name="backfill" type="BackfillType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>表名（必填）；"*" 表示库中所有业务表。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="TableAction" default="ALTER">
+      <xs:annotation>
+        <xs:documentation>表级动作，缺省 ALTER。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="comment" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表注释；action=COMMENT 时使用。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="newName" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>新的表名，action=RENAME 时必填。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="tables" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>显式表清单，逗号分隔；仅在 name="*" 时有意义（离线也能展开）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="rebuild" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>已废弃：解析器忽略此属性，请改用 action="REBUILD"。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="engine" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表引擎（仅 MySQL/MariaDB；action=ENGINE 或与 ENGINE/CHARSET 同用）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="charset" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表字符集（仅 MySQL/MariaDB；action=CHARSET）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="collate" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表排序规则（仅 MySQL/MariaDB）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="tablespace" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>表空间（PostgreSQL / Oracle 类方言；action=TABLESPACE）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="RawSqlType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>原样执行的 SQL：直接写文本（推荐 CDATA），不分析、不分方言。只能作为 &lt;changeUnit&gt; 的直接子节点；空内容报 E051。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="sql" type="DialectSqlType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>归属表名（可选），仅用于分组与日志，不影响执行。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ViewType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>视图：提供 &lt;select&gt; 时按方言结构化生成；只给 &lt;sql dialect&gt; 或 dialect 属性 + 节点内文本时原样透传；action=DROP 可只写 name。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="select" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>视图查询语句（不含 CREATE VIEW 前缀），例如 SELECT id, name FROM nor_user。</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="sql" type="DialectSqlType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>视图名（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD（各生成 CREATE OR REPLACE / CREATE OR ALTER）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="select" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>兼容写法：也可用 select 属性代替 &lt;select&gt; 子节点。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="dialect" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;select&gt; 或 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="columns" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>视图列名清单，逗号分隔（可选）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="comment" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>视图注释（方言支持时使用）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="SequenceType">
+    <xs:annotation>
+      <xs:documentation>序列：PostgreSQL / SQL Server 原生支持；MySQL / SQLite 报 E046，请改用 &lt;rawSql&gt;。给 &lt;sql&gt; 子节点时按方言原样透传。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="sql" type="DialectSqlType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="required">
+      <xs:annotation>
+        <xs:documentation>序列名（必填）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="action" type="ObjectAction" default="ADD">
+      <xs:annotation>
+        <xs:documentation>动作，缺省 ADD。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="start" type="xs:long">
+      <xs:annotation>
+        <xs:documentation>起始值 START WITH。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="increment" type="xs:long">
+      <xs:annotation>
+        <xs:documentation>步长 INCREMENT BY。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="minValue" type="xs:long">
+      <xs:annotation>
+        <xs:documentation>最小值 MINVALUE。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="maxValue" type="xs:long">
+      <xs:annotation>
+        <xs:documentation>最大值 MAXVALUE。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="cycle" type="BooleanLiteral">
+      <xs:annotation>
+        <xs:documentation>是否循环 CYCLE。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="cache" type="xs:long">
+      <xs:annotation>
+        <xs:documentation>缓存个数 CACHE。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ScriptType" mixed="true">
+    <xs:annotation>
+      <xs:documentation>触发器 / 存储过程 / 函数：语法差异是结构性的，按方言写 &lt;sql dialect="..."&gt; 原样透传（也支持直接在节点内写文本 / CDATA）。</xs:documentation>
+    </xs:annotation>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="sql" type="DialectSqlType" />
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>对象名（用于日志与排序，可选）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="dialect" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>直接写文本时的方言名（mysql / mariadb / postgresql / sqlserver / sqlite）；使用 &lt;sql&gt; 子节点时无需该属性。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="stage" type="Stage" default="after">
+      <xs:annotation>
+        <xs:documentation>执行时机：before / after（缺省）。</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:element name="changeUnit">
+    <xs:annotation>
+      <xs:documentation>变更单元根节点。文件名必须是 {yyyyMMdd_HHmmss}.xml 或 {yyyyMMdd}.xml；id 必须与文件名前缀一致；release 必填。</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="description" type="xs:string">
+          <xs:annotation>
+            <xs:documentation>人类可读的变更说明。</xs:documentation>
+          </xs:annotation>
+        </xs:element>
+        <xs:element name="depends" type="DependsType" />
+        <xs:element name="table" type="TableType" />
+        <xs:element name="rawSql" type="RawSqlType" />
+        <xs:element name="view" type="ViewType" />
+        <xs:element name="sequence" type="SequenceType" />
+        <xs:element name="trigger" type="ScriptType" />
+        <xs:element name="procedure" type="ScriptType" />
+        <xs:element name="function" type="ScriptType" />
+      </xs:choice>
+      <xs:attribute name="id" type="ChangeId" use="required">
+        <xs:annotation>
+          <xs:documentation>变更单元 id（必填）：8 位日期开头，必须与文件名前缀一致。</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="author" type="xs:string" use="required">
+        <xs:annotation>
+          <xs:documentation>变更作者（必填）。</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+      <xs:attribute name="release" type="Release" use="required">
+        <xs:annotation>
+          <xs:documentation>所属发布版本（必填）：yyyyMMdd；基线固定 00000000；不得晚于当前日期 + 1 天。</xs:documentation>
+        </xs:annotation>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

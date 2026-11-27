@@ -174,7 +174,6 @@ namespace DbChronicle.IntegrationTests
             config.Paths.VersionLog = "./version_log/${environment}";
             config.Paths.Output = "./output";
             config.Options.IncrementalModify = true;
-            config.Options.AllowDestructive = true;
             return config;
         }
 

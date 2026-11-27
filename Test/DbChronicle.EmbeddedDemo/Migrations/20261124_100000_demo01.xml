@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261124_100000_demo01" author="demo" release="20261124">
+  <description>演示：加邮箱列并建索引</description>
+  <table name="demo_user" action="ALTER">
+    <column name="email" action="ADD" type="String" length="200" nullable="true" />
+    <index name="idx_demo_user_email" columns="email" />
+  </table>
+</changeUnit>

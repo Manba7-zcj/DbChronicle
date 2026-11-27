@@ -65,6 +65,21 @@ namespace DbChronicle.Tests
         }
 
         [Fact]
+        public void Parse_ShouldAllowDropAndDelete_WithoutConfigSwitch()
+        {
+            var unit = TestSupport.ParseSingle(
+                "  <table name=\"t\" action=\"DROP\"/>\n"
+                + "  <table name=\"t2\" action=\"ALTER\">\n"
+                + "    <column name=\"c\" action=\"DROP\"/>\n"
+                + "    <delete where=\"id &lt; 0\"/>\n"
+                + "  </table>");
+
+            Assert.False(TestSupport.HasError(unit), string.Join(" | ", unit.Diagnostics.Select(x => x.ToString())));
+            Assert.DoesNotContain(unit.Diagnostics, x => x.Code == "E030");
+            Assert.Contains(unit.Operations, x => x is DropTableOperation);
+        }
+
+        [Fact]
         public void Parse_ShouldRejectNonDefinition_WhenBaselineFrozen()
         {
             var directory = TestSupport.CreateMigrationsDirectory();

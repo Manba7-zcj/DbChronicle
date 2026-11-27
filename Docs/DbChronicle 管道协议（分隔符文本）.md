@@ -104,8 +104,8 @@ Java 版为了直观整段读入内存；语句量很大时可换成按 `0x1E` �
 ## 5. 命令行契约
 
 ```
-db-chronicle compile --no-config --migrations <dir> --dialect <name> --allow-destructive --emit pipe
-db-chronicle compile --no-config --migrations <dir> --dialect <name> --allow-destructive --pipe <pipeName>
+db-chronicle compile --no-config --migrations <dir> --dialect <name> --emit pipe
+db-chronicle compile --no-config --migrations <dir> --dialect <name> --pipe <pipeName>
 ```
 
 - **`--no-config` 即「零配置模式」**：完全不读、也不生成 `DbchronicleConfig.xml`，所有取值来自命令行 + 代码默认值。适合嵌入式宿主（宿主目录里不需要任何 DbChronicle 配置文件，`config\` 目录也不会出现明文 XML）。
@@ -136,7 +136,6 @@ db-chronicle compile --no-config --migrations <dir> --dialect <name> --allow-des
 | `options.includeComments` | `--sql-comments` / `--no-sql-comments` | `true` |
 | `options.includeRollback` | `--include-rollback` / `--no-include-rollback` | `false` |
 | `options.statementDelimiter` | `--statement-delimiter <s>` | `;` |
-| `options.allowDestructive` | `--allow-destructive` | `false` |
 | `options.lockTimeoutSeconds` | `--lock-timeout <sec>` | `10` |
 | `options.incrementalModify` | `--incremental-modify` / `--no-incremental-modify` | `true` |
 | `options.commitScope` | `--commit-scope <unit\|table\|batch>` | `unit` |

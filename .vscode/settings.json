@@ -1,0 +1,35 @@
+{
+  "xml.fileAssociations": [
+    {
+      "pattern": "**/LogicModels/**/*.xml",
+      "systemId": "${workspaceFolder}/Src/DbChronicle/Schema/DbChronicle.ChangeUnit.xsd"
+    },
+    {
+      "pattern": "**/migrations/**/*.xml",
+      "systemId": "${workspaceFolder}/Src/DbChronicle/Schema/DbChronicle.ChangeUnit.xsd"
+    },
+    {
+      "pattern": "**/Migrations/**/*.xml",
+      "systemId": "${workspaceFolder}/Src/DbChronicle/Schema/DbChronicle.ChangeUnit.xsd"
+    },
+    {
+      "pattern": "**/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.xml",
+      "systemId": "${workspaceFolder}/Src/DbChronicle/Schema/DbChronicle.ChangeUnit.xsd"
+    },
+    {
+      "pattern": "**/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].xml",
+      "systemId": "${workspaceFolder}/Src/DbChronicle/Schema/DbChronicle.ChangeUnit.xsd"
+    }
+  ],
+  "xml.validation.enabled": true,
+  "xml.validation.schema": true,
+  "xml.format.enabled": true,
+  "[xml]": {
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": true
+    }
+  },
+  "genie.editCode.defaultDiffViewMode": "side-by-side"
+}

@@ -356,7 +356,6 @@ namespace DbChronicle.Demo.OperationTests
             config.Paths.Migrations = "./migrations";
             config.Paths.VersionLog = "./version_log/${environment}";
             config.Paths.Output = "./output";
-            config.Options.AllowDestructive = true;
             config.Options.IncrementalModify = incrementalModify;
             config.Options.IncludeComments = true;
             config.Options.CommitScope = "unit";

@@ -58,7 +58,6 @@ namespace DbChronicle.IntegrationTests
             var config = new DbChronicleConfig { BaseDirectory = directory };
             config.Database.Dialect = "sqlite";
             config.Options.IncrementalModify = true;
-            config.Options.AllowDestructive = true;
 
             return new ChangeUnitParser(config).Parse(path);
         }

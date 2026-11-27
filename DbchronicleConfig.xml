@@ -5,5 +5,5 @@
   <environment>dev</environment>
   <paths migrations="./migrations" versionLog="./version_log/${environment}" output="./output" />
   <baseline file="migrations/00000000_000000_baseline.xml" frozen="false" frozenAt="" />
-  <options quoteIdentifiers="true" includeComments="true" includeRollback="false" statementDelimiter=";" allowDestructive="false" lockTimeoutSeconds="10" incrementalModify="true" commitScope="unit" commitBatchSize="10" />
+  <options quoteIdentifiers="true" includeComments="true" includeRollback="false" statementDelimiter=";" lockTimeoutSeconds="10" incrementalModify="true" commitScope="unit" commitBatchSize="10" />
 </dbchronicle>

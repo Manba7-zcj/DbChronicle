@@ -6,7 +6,6 @@ namespace DbChronicle.Configuration
         public bool IncludeComments { get; set; } = true;
         public bool IncludeRollback { get; set; }
         public string StatementDelimiter { get; set; } = ";";
-        public bool AllowDestructive { get; set; }
         public int LockTimeoutSeconds { get; set; } = 10;
         public bool IncrementalModify { get; set; } = true;
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="00000000_000000_baseline" author="demo" release="00000000">
+  <description>基线：演示用户表</description>
+  <table name="demo_user" action="CREATE">
+    <column name="id" type="Int64" nullable="false" primaryKey="true" autoIncrement="true" />
+    <column name="name" type="String" length="64" nullable="false" />
+    <column name="created_at" type="DateTime" nullable="true" />
+  </table>
+</changeUnit>
